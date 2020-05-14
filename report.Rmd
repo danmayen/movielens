@@ -2,7 +2,9 @@
 title: "MovieLens Project"
 author: "Dr Daniel Mayenberger"
 date: "May 2020"
-output: html_document
+output: 
+    pdf_document:
+        number_sections: true
 ---
 
 ```{r setup, include=FALSE, echo=FALSE}
@@ -10,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r load data, echo=FALSE}
+```{r load data, echo = FALSE}
 # load data from local repository
 # source("loadLocalData.R")
 ```
