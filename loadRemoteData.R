@@ -46,3 +46,10 @@ rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
 # save extracted data to file
 # save.image(file = "data//dslabs_movielens.Rdata")
+
+# save extracts for quick exploration / code trials
+set.seed(123, sample.kind = "Rounding")
+edx_1000 <- sample_n(edx, size = 1000)
+validation_1000 <- sample_n(validation, size = 1000)
+save(edx_1000, validation_1000, 
+     file = "data//dslabs_movielens_extract.Rdata")
