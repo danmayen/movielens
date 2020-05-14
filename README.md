@@ -12,5 +12,5 @@ Loads data from local file data/dslabs_movielens.Rdata
 R script to answer introductory questions
 
 # Rmarkdown files
-* report.rmd
+* report.rmd  
 Main report
