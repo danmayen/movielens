@@ -3,7 +3,7 @@ title: "MovieLens Project"
 author: "Dr Daniel Mayenberger"
 date: "May 2020"
 output: 
-    pdf_document:
+    html_document:
         number_sections: true
 ---
 
@@ -12,9 +12,26 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r load data, echo = FALSE}
+```{r libraries and load data, include = FALSE}
+# libraries
+library(tidyverse)
+library(lubridate)
+library(caret)
+library(ggplot2)
+# Set to TRUE for final version, is kept at FALSE for quicker compiling
+FINAL_VERSION = FALSE
+
 # load data from local repository
-# source("loadLocalData.R")
+if(FINAL_VERSION) {
+    source("loadLocalData.R")
+} else {
+    source("loadLocalSampleData.R")
+    edx <- edx_1000
+    validation <- validation_1000
+    rm(edx_1000, validation_1000)
+    }
+df <- data.frame(x = c(1, 2, 3, 4, 5),
+                 y = c(2, 3, 1, 5, 4))
 ```
 
 
@@ -27,9 +44,82 @@ Report on RMSE here!
 
 ## Process and Techniques Used
 
+[TBD: add techniques from data transformation, visualisation, modelling]
+
+## Data Structure and Loading
+The raw data is provided in two sets, called `edx` and `validation`.
+
+### Sample Data
+To facilitate code verification, 1,000 samples of data have been extracted from
+both datasets `edx` and `validation`, called `edx_1000` and `validation_1000`
+respectively. This is achieved with the following code:
+
+```{r eval = FALSE}
+set.seed(123, sample.kind = "Rounding")
+edx_1000 <- sample_n(edx, size = 1000)
+validation_1000 <- sample_n(validation, size = 1000)
+```
+
+### Basic Data Structure
+Both `edx` and `validation` have the same structure that can be displayed with 
+the `str` function and is listed below for `edx`:
+
+|Column name   |Type      |First values                                                                                     |
+|:---------|:---------|:-----------------------------------------------------------------------------------------------|
+|userId    |integer   |1 1 1                                                                                           |
+|movieId   |numeric   |122 185 292                                                                                     |
+|rating    |numeric   |5 5 5                                                                                           |
+|timestamp |integer   |838985046 838983525 838983421                                                                   |
+|title     |character |Boomerang (1992) Net, The (1995) Outbreak (1995)                                                |
+|genres    |character |Comedy&#124;Romance Action&#124;Crime&#124;Thriller Action&#124;Drama&#124;Sci-Fi&#124;Thriller |
+
+
+The data sets are both tidy as well - the count of `NA` values is zero for both 
+sets:
+```{r}
+edx %>% summarise_all(~sum(is.na(.)))
+validation %>% summarise_all(~sum(is.na(.)))
+```
+
+The `userId`, `movieId` , `rating` and `title` data can be used directly in
+the format provided. These two columns need further processing:
+
+1. The `timestamp` column is in raw data format of seconds since 1 January 1970 
+and will be converted into a date & time format.
+2. The `genres` column contains one ore more genres for each movie, separated
+by a pipe (`|`) symbol, so theywill be separated.
+
 ## Data Cleaning
+### Conversion of Timestamp to Date
+The `timestamp` column is converted to a date and time using the `as_datetime`
+function for both the `edx` and the `validation` dataset and stored in 
+a new column `ratingdate`. After the conversion the `timestamp` columns
+are no longer required and are discarded.
+```{r}
+edx <- edx %>%
+    mutate(ratingdate = as_datetime(timestamp)) %>%
+    select(-timestamp)
+
+validation <- validation %>%
+    mutate(ratingdate = as_datetime(timestamp)) %>%
+    select(-timestamp)
+```
+
+### Separation of Genres
+[TBD once needed]
 
 ## Data Exploration and Visualisation
+
+### Movie Effect
+
+### User Effect
+
+### Time of rating
+[TBD: try different granularity, not only weeks]
+
+### Genre effect
+
+### Principal components
 
 ## Modelling Approach
 
