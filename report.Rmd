@@ -1,0 +1,43 @@
+---
+title: "MovieLens Project"
+author: "Dr Daniel Mayenberger"
+date: "May 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load data, echo=FALSE}
+# load data from local repository
+# source("loadLocalData.R")
+```
+
+
+# Executive Summary
+Report on RMSE here!
+
+# Introduction
+
+# Methods
+
+## Process and Techniques Used
+
+## Data Cleaning
+
+## Data Exploration and Visualisation
+
+## Modelling Approach
+
+# Results
+Report on RMSE here
+
+
+# Conclusion
+
+```{r }
+# code goes here
+```
+
