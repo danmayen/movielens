@@ -89,7 +89,72 @@ length(gregexpr("\\|", "1|222|2|123|q2|asdfjn")[[1]])
 nrow(str_locate_all("1|222|2|123|q2|asdfjn", "\\|")[[1]])
 
 ################################################################################
-# 3.4.1 Movie effect
+# 3.4 Data Exploration and Visualisation
+################################################################################
+
+################################################################################
+# 3.4.1 General Data Distribution Properties
+################################################################################
+
+# basic facts
+edx %>%
+    summarise(n_movies = n_distinct(movieId),
+              n_users = n_distinct(userId))
+# total # combinations
+10677 * 69878
+# 746,087,406
+
+# sparsity - code into appendix
+n_movies_sub <- length(unique(edx_1000$movieId))
+n_users_sub <- length(unique(edx_1000$userId))
+edx_1000 %>%
+    mutate(rating = 1) %>%
+    select(movieId, userId, rating) %>%
+    spread(movieId, rating) %>% 
+    column_to_rownames(var = "userId") %>% 
+    as.matrix() %>% t() %>%
+    image(x = 1:n_movies_sub, y = 1:n_users_sub, z = ., 
+          xlab = "Movies", ylab = "Users",
+          col = grey.colors(n = 1, start = 0, end = 1))
+
+# ratings by movie - code into appendix
+edx %>%
+    group_by(movieId) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = n)) +
+    scale_x_log10() +
+    geom_histogram(col = "black") +
+    labs(title = "Rating counts by movie", 
+         x = "Number of Ratings (log scale)")
+
+# ratings by user - code into appendix
+edx %>%
+    group_by(userId) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = n)) +
+    scale_x_log10() +
+    geom_histogram(bins = 40, col = "black") +
+    labs(title = "Rating counts by user", 
+         x = "Number of Ratings (log scale)")
+
+# distribution of ratings overall
+# DO NOT RUN - this does work but is SLOW
+edx %>%
+    ggplot(aes(x = rating)) +
+    geom_histogram(binwidth = 0.5, col = "black") +
+    labs(title = "Distribution of ratings - total",
+         x = "Rating") 
+
+# quicker version
+edx %>%
+    count(rating) %>%
+    ggplot(aes(x = factor(rating), y = n)) +
+    geom_bar(stat = "identity", width = 1, col = "black")+
+    labs(title = "Distribution of ratings - total",
+         x = "Rating") 
+
+################################################################################
+# 3.4.2 Movie effect
 ################################################################################
 
 # distribution of ratings by movie
@@ -116,7 +181,7 @@ p2 <- movie_avgs %>%
 grid.arrange(p1, p2, nrow = 2)
 
 ################################################################################
-# 3.4.2 User effect
+# 3.4.3 User effect
 ################################################################################
 
 # distribution of ratings by user
@@ -142,22 +207,133 @@ p2 <- user_avgs %>%
          y = "Rating Standard Deviation")
 grid.arrange(p1, p2, nrow = 2)
 
-# get rid of temporary objects
+# discard temporary objects
 rm(p1, p2)
 
-# generate list of training and validation sets
-# use function createResample
-set.seed(342, sample.kind = "Rounding")
-index_list <- createFolds(edx$rating, k = 10)
+################################################################################
+# 3.4.4 Time of Rating
+################################################################################
 
-# run cross-validation of regularisation with indices
+
+################################################################################
+# 3.4.5 Genre Effect
+################################################################################
+
+
+################################################################################
+# 3.4.7 Data in "validation" set that are not in "edx" set
+################################################################################
+
+validation %>%
+    anti_join(edx, by = "movieId") %>%
+    group_by(movieId, title) %>%
+    summarise(n = n())
+
+validation %>%
+    anti_join(edx, by = "userId") %>%
+    group_by(userId) %>%
+    summarise(n = n())
+
+validation %>%
+    anti_join(edx, by = "genres") %>%
+    group_by(genres) %>%
+    summarise(n = n())
+
+################################################################################
+# 3.5 Modelling approach
+################################################################################
+
+# Generate list of training and test sets from "edx" for k-fold cross-validation
+# Use function createFolds with k = 25 
+# For a test run k = 10 was used
+set.seed(342, sample.kind = "Rounding")
+index_list <- createFolds(edx$rating, k = 25)
+
+################################################################################
+# 3.5.1 Constant Value
+################################################################################
+
+# predict this value for each rating, irrespective of other features
+mu <- mean(edx$rating)
+
+# wrap into function to predict average rating for each movie/user combination
+predict_const <- function(newdata) {
+    mu <- mean(edx$rating)
+    return(rep(mu, nrow(newdata)))
+    }
+
+################################################################################
+# 3.5.2 Movie Effect Only
+################################################################################
+
+# The movie effects $b_i$ are calculated similar to Section 3.4.2
+# These are now used for prediction of the rating with the model
+# $\hat{y}_{u,i} = \mu + b_i$
+predict_movieb <- function(newdata) {
+    # calculate mean $\mu$ of overall `edx` training set
+    mu <- mean(edx$rating)
+
+    # estimate $b_i = y_{u,i} - \mu$ for each movie $i$.
+    b_i_tbl <- edx %>%
+        group_by(movieId) %>%
+        summarise(b_i = mean(rating - mu))
+
+    # look up $b_i$ for each movie to predict $\hat{y}_{u,i} = \mu + b_i$
+    pred_ratings <- newdata %>%
+        left_join(b_i_tbl, by = "movieId") %>%
+        mutate(y_hat = mu + b_i) %>% .$y_hat
+    return(pred_ratings)
+    }
+
+
+################################################################################
+# 3.5.3 User Effect Only
+################################################################################
+
+# The user effects $b_u$ are calculated similar to Section 3.4.3
+# These are now used for prediction of the rating with the model
+# $\hat{y}_{u,i} = \mu + b_u$
+predict_userb <- function(newdata) {
+    # calculate mean $\mu$ of overall `edx` training set
+    mu <- mean(edx$rating)
+    
+    # estimate $b_u = y_{u,i} - \mu$ for each movie $i$.
+    b_u_tbl <- edx %>%
+        group_by(userId) %>%
+        summarise(b_u = mean(rating - mu))
+    
+    # look up $b_u$ for each movie to predict $\hat{y}_{u,i} = \mu + b_u$
+    pred_ratings <- newdata %>%
+        left_join(b_u_tbl, by = "userId") %>%
+        mutate(y_hat = mu + b_u) %>% .$y_hat
+    return(pred_ratings)
+    }
+
+
+################################################################################
+# 3.5.5 Combined Movie and User Effects
+################################################################################
+
+
+################################################################################
+# 3.5.6 Regularised Movie and User Effects
+################################################################################
+
+#' Calculate RMSE using k-fold cross validation
+#' for regularised movie-user effect with regularisation parameter lambda
+#' 
+#' @param data Complete training data, to be split into (sub-)training
+#'        and validation data.
+#' @param ind_list List of $k$ indices of *validation* set.
+#' @param lambda Regularisation parameter $\lambda$. 
+#' @return Vector of RMSEs of length $k$
 RMSE_movieuser_kfold <- function(data, ind_list, lambda) {
     n <- length(ind_list)
     # iterate over indices
     rmse_v <- sapply(1:n, function (listIdx) {
         # split data int training and validation set
         train_set <- data[-ind_list[[listIdx]], ]
-        test_set <- data[ind_list[[listIdx]], ]
+        validation_set <- data[ind_list[[listIdx]], ]
         # use training set for regularised movie + user effects
         mu <- mean(train_set$rating)
         b_i <- train_set %>%
@@ -169,21 +345,22 @@ RMSE_movieuser_kfold <- function(data, ind_list, lambda) {
             summarize(b_u = sum(rating - b_i - mu)/(n()+lambda))
         # modify test set so all movies and users from training
         # set are contained in it
-        test_set <- test_set %>%
+        validation_set <- validation_set %>%
             semi_join(train_set, by = "movieId") %>%
             semi_join(train_set, by = "userId")
         # if nothing left, can already return NA
-        if(length(test_set) == 0) {
+        if(length(validation_set) == 0) {
             return(NA)
         } else {
-            # otherwise estimate ratings
+            # otherwise estimate ratings as \mu + b_i + b_u
             ratings_hat <- 
-                test_set %>% 
+                validation_set %>% 
                 left_join(b_i, by = "movieId") %>%
                 left_join(b_u, by = "userId") %>%
                 mutate(pred = mu + b_i + b_u) %>%
                 .$pred
-            return(RMSE(ratings_hat, test_set$rating))
+            #  and finally, calculate RMSE
+            return(RMSE(ratings_hat, validation_set$rating))
             }
         })
     return(rmse_v)
@@ -192,12 +369,11 @@ RMSE_movieuser_kfold <- function(data, ind_list, lambda) {
 # apply this for a list of lambdas
 lambdas <- seq(0, 10, 0.25)
 RMSE_data <- map_df(lambdas, function(lambda) {
-    paste0("Calculate for lambda = ",lambda)
     # calculate vector of RMSEs
     rmse_vec <- RMSE_movieuser_kfold(edx, index_list, lambda)
     # strip out the NA values
     rmse_vec <- na.omit(rmse_vec)
-    # calculate mean and standard deviation of RMSE
+    # calculate mean and standard deviation of RMSEs
     list(RMSE_avg = mean(rmse_vec),
          RMSE_sd = sd(rmse_vec))
     })
@@ -210,15 +386,125 @@ RMSE_data <- cbind(data.frame(lambda = lambdas),
 lambda_opt <- lambdas[which.min(RMSE_data$RMSE_avg)]
 RMSE_lambda_opt <- RMSE_data$RMSE_avg[which.min(RMSE_data$RMSE_avg)]
 
-# plot to illustrate min RMSE
-RMSE_data %>%
+# join RMSE data for diferent k - for k = 10 calculated by
+# setting k = 10 at the start of Section 3.5 , recomputing "index_list"
+# and running the code from RMSE_data
+RMSE_data_k10 <- cbind(data.frame(k = rep(10, nrow(RMSE_data_k10))),
+                       RMSE_data_k10)
+RMSE_data_k25 <- cbind(data.frame(k = rep(25, nrow(RMSE_data_k10))),
+                       RMSE_data)
+RMSE_data_joint <-rbind(RMSE_data_k10, RMSE_data_k25)
+RMSE_data_joint <- RMSE_data_joint %>% 
+    mutate(k = factor(k, levels = c(10, 25)))
+
+# plot 
+RMSE_data_joint %>%
     ggplot(aes(x = lambda, y = RMSE_avg,
                ymin = RMSE_avg - RMSE_sd,
-               ymax = RMSE_avg + RMSE_sd)) +
+               ymax = RMSE_avg + RMSE_sd,
+               col = k)) +
     geom_point() +
     geom_errorbar() +
     geom_vline(xintercept = lambda_opt, linetype = "dashed") +
-    geom_hline(yintercept = RMSE_lambda_opt, linetype = "dashed") +
-    labs(y = "RMSE (with error)", title = "Tuning of lambda")
+    labs(y = "RMSE (with bootstrapped error)", 
+         title = "Tuning of lambda for regularisation")
 
-save.image(file = "movielens_20200514.Rdata")
+# save for plotting in document
+save(RMSE_data_joint, file = "RMSE_data_regularisation.Rdata")
+
+# prediction function for regularised movie/user effect
+predict_regmovieuser <- function(newdata, lambda) {
+    # overall mean on training data
+    mu <- mean(edx$rating)
+    # tabulate movie effects "b_i" with regularisation
+    b_i_tbl <- edx %>%
+        group_by(movieId) %>%
+        summarise(b_i = sum(rating - mu)/(n()+lambda))
+    # tabulate user effects "b_u" with regularisation
+    b_u_tbl <- edx %>% 
+        left_join(b_i, by="movieId") %>%
+        group_by(userId) %>%
+        summarise(b_u = sum(rating - b_i - mu)/(n()+lambda))
+    # calculate rating prediction by looking up "b_i" and "b_u"
+    # from the tables just created and compute on the NEW data
+    # \mu + b_i + b_u
+    pred_ratings <- 
+        newdata %>% 
+        left_join(b_i_tbl, by = "movieId") %>%
+        left_join(b_u_tbl, by = "userId") %>%
+        mutate(pred = mu + b_i + b_u) %>%
+        .$pred
+    return(pred_ratings)
+    }
+
+# save down for k = 10
+# for k = 10 had optimal lambda = 5, same for k = 25
+
+################################################################################
+# 3.5.5 Additional Time Effect
+################################################################################
+
+# need to strip out (regularised) movie and user effect
+
+################################################################################
+# 3.5.6 Additional Genre Effect
+################################################################################
+
+
+################################################################################
+# 4 Results
+################################################################################
+
+################################################################################
+# 4.1 Constant Value
+################################################################################
+
+# predict ratings and calculate RMSE
+ratings_hat_const <- predict_const(validation)
+RMSE_rating(ratings_hat_const, validation$rating)
+# create table with first row of results
+
+
+################################################################################
+# 4.2 Movie Effect Only
+################################################################################
+
+# predict ratings and calculate RMSE
+ratings_hat_movieb <- predict_movieb(validation)
+rmse_movieb <- RMSE_rating(ratings_hat_movieb, validation$rating)
+# append to results
+
+
+################################################################################
+# 4.3 User Effect Only
+################################################################################
+
+# predict ratings and calculate RMSE
+ratings_hat_userb <- predict_userb(validation)
+rmse_userb <- RMSE_rating(ratings_hat_userb, validation$rating)
+# append to results
+
+################################################################################
+# 4.4 Regularised Movie and User Effect
+################################################################################
+
+# predict ratings and calculate RMSE
+ratings_hat_regmovieuser <- predict_regmovieuser(validation, lambda_opt)
+rmse_regmovieuser <- RMSE_rating(ratings_hat_regmovieuser, validation$rating)
+# append to results
+
+################################################################################
+# 4.5 Regularised Movie and User Effect, Additional Time Effect
+################################################################################
+
+################################################################################
+# 4.6 Regularised Movie and User Effect, Additional Time and Genre Effect
+################################################################################
+
+
+################################################################################
+################################################################################
+# Saving progress
+################################################################################
+################################################################################
+save.image(file = "movielens_20200515.Rdata")

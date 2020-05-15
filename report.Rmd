@@ -19,6 +19,7 @@ library(lubridate)
 library(caret)
 library(ggplot2)
 # Set to TRUE for final version, is kept at FALSE for quicker compiling
+# of drafts
 FINAL_VERSION = FALSE
 
 # load data from local repository
@@ -28,10 +29,7 @@ if(FINAL_VERSION) {
     source("loadLocalSampleData.R")
     edx <- edx_1000
     validation <- validation_1000
-    rm(edx_1000, validation_1000)
     }
-df <- data.frame(x = c(1, 2, 3, 4, 5),
-                 y = c(2, 3, 1, 5, 4))
 ```
 
 
@@ -49,12 +47,12 @@ Report on RMSE here!
 ## Data Structure and Loading
 The raw data is provided in two sets, called `edx` and `validation`.
 
-### Sample Data
+### Sample Data {#data_sample_data}
 To facilitate code verification, 1,000 samples of data have been extracted from
 both datasets `edx` and `validation`, called `edx_1000` and `validation_1000`
 respectively. This is achieved with the following code:
 
-```{r eval = FALSE}
+```{r data sample data, eval = FALSE}
 set.seed(123, sample.kind = "Rounding")
 edx_1000 <- sample_n(edx, size = 1000)
 validation_1000 <- sample_n(validation, size = 1000)
@@ -76,7 +74,7 @@ the `str` function and is listed below for `edx`:
 
 The data sets are both tidy as well - the count of `NA` values is zero for both 
 sets:
-```{r}
+```{r data tidy}
 edx %>% summarise_all(~sum(is.na(.)))
 validation %>% summarise_all(~sum(is.na(.)))
 ```
@@ -87,7 +85,7 @@ the format provided. These two columns need further processing:
 1. The `timestamp` column is in raw data format of seconds since 1 January 1970 
 and will be converted into a date & time format.
 2. The `genres` column contains one ore more genres for each movie, separated
-by a pipe (`|`) symbol, so theywill be separated.
+by a pipe (`|`) symbol, so they will be separated.
 
 ## Data Cleaning
 ### Conversion of Timestamp to Date
@@ -95,7 +93,7 @@ The `timestamp` column is converted to a date and time using the `as_datetime`
 function for both the `edx` and the `validation` dataset and stored in 
 a new column `ratingdate`. After the conversion the `timestamp` columns
 are no longer required and are discarded.
-```{r}
+```{r data conversion of date}
 edx <- edx %>%
     mutate(ratingdate = as_datetime(timestamp)) %>%
     select(-timestamp)
@@ -110,7 +108,49 @@ validation <- validation %>%
 
 ## Data Exploration and Visualisation
 
-### Movie Effect
+### General Data Distribution Properties
+The `edx` data set contains 9,000,055 data point, consisting of 10,677
+distinct movies and 69,878 different users:
+```{r data count}
+edx %>%
+    summarise(n_movies = n_distinct(movieId),
+              n_users = n_distinct(userId))
+```
+With that, the total number of diferent movie/user combinations is
+$10,677 \times 69,878 = 746,087,406$, much more than the overall 10 million
+data points from the combined `edx` and `validation` sets. While it is not
+feasible with the memory capacity of a personal computer to visualise all of
+the over 700 million combinations, it is possible to illustrate the sparsity
+of the data set on a representative sample.
+
+```{r, include = FALSE}
+n_movies_sub <- length(unique(edx_1000$movieId))
+n_users_sub <- length(unique(edx_1000$userId))
+```
+
+Within the sample of 1,000 ratings drawn as described in 
+[Section 3.2.1](#data_sample_data) there are already `r n_movies_sub`
+different movies and `r n_users_sub` different users. Plotting the
+data points of this matrix shows that the data given are very sparse 
+but at least evenly distributed among movies and users:
+
+```{r data matrix of subset, echo = FALSE}
+edx_1000 %>%
+    mutate(rating = 1) %>%
+    select(movieId, userId, rating) %>%
+    spread(movieId, rating) %>% 
+    column_to_rownames(var = "userId") %>% 
+    as.matrix() %>% t() %>%
+    image(x = 1:n_movies_sub, y = 1:n_users_sub, z = ., 
+          xlab = "Movies", ylab = "Users",
+          col = grey.colors(n = 1, start = 0, end = 1))
+```
+
+- [TBD: Distribution of ratings by movie]
+- [TBD: Distribution of ratings by user]
+- [TBD: Distribution of ratings]
+
+### Movie Effect {#data_movie_effect}
 
 ### User Effect
 
@@ -121,7 +161,63 @@ validation <- validation %>%
 
 ### Principal components
 
+### Extrapolation Requirements Check
+To predict movie ratings and calculate the final RMSE, it must be considered 
+how the algorithm handles data in the `validation` data set to which it was
+not trained in the `edx` set. It will be shown that there is no need for 
+such extrapolation for the provided data sets.
+
+By construction, the `validation` set only contains movies and users that 
+are also in the `edx` set, with the `semi_join` statements provided in
+the instructions. For verification, this code confirms that indeed no movies
+or users from the `validation` set are missing from the `edx` set:
+
+```{r}
+validation %>%
+    anti_join(edx, by = "movieId") %>%
+    group_by(movieId, title) %>%
+    summarise(n = n())
+
+validation %>%
+    anti_join(edx, by = "userId") %>%
+    group_by(userId) %>%
+    summarise(n = n())
+```
+
+
+In addition, all genres, and even more specifically, all their combinations
+that are present in the `validation` set are also found in the `edx` set, 
+as this code shows:
+```{r}
+validation %>%
+    anti_join(edx, by = "genres") %>%
+    group_by(genres) %>%
+    summarise(n = n())
+```
+So with the given data set, no extrapolation to movies, users or genres needs
+to be made in predicting ratings and determining model performance.
+
 ## Modelling Approach
+The training of model parameters is generally done using k-fold 
+cross-validation. To do this, the `edx` data is split into a training and
+a validation set 
+
+### Constant Value
+
+### Movie Effect Only
+As seen in [Section 3.4.2](#data_movie_effect), there is an effect
+
+### User Effect Only
+
+### Combined Movie and User Effect
+
+### Regularised Movie and User Effect
+
+
+### Additional Time Effect
+
+### Additional Genre Effect
+
 
 # Results
 Report on RMSE here
@@ -133,3 +229,8 @@ Report on RMSE here
 # code goes here
 ```
 
+\fontsize{14}{16}\selectfont{\textbf{Appendix A}}
+
+\fontsize{12}{14}\selectfont{}
+normal text
+Continued normal text
