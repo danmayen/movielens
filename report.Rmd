@@ -34,17 +34,147 @@ if(FINAL_VERSION) {
 
 
 # Executive Summary
-Report on RMSE here!
+Given over 10,000 movies and about 70,000 users that have rated some of these
+movies on a rating scale from zero to five stars, the goal is to predict future
+ratings based on past ratings. The challenge is to do this for the over 700
+millions different movie/user combinations  based on only 1.2% (9 millions) of
+such combinations used for training the algorithm.
+
+The available data of 10 million ratings are split into 9 million ratings to
+train different algorithms and 1 million ratings to evaluate the performance
+of these methods. Performance is the root-mean squared error (RMSE) of ratings.
+
+Based on the RMSE, the model that performs best with an RMSE of [TBD] is
+\[
+Y_{u,i} = \mu + b_i + b_u + \sum_{k=1}^K \delta_{i,k} \beta_k + 
+\varepsilon_{u,i},
+\]
+where $Y_{u,i}$ is the rating by user $u$ of movie $i$, and $\delta_{i,k}$ is
+an indicator which is $1$ if the movie $i$ is of genre $k$ and zero otherwise.
 
 # Introduction
+The movielens project makes available millions of a movie ratings provided by
+anonymised users.
 
-# Methods
+From the movielens website information about the data [here](http://files.grouplens.org/datasets/movielens/ml-10m-README.html)
+the following further information is provided: 
 
-## Process and Techniques Used
+* The data set contains just over 10 million ratings by users of the online
+movie recommender service MovieLens.
+* Users were selected at random for inclusion. All users selected had rated at
+least 20 movies. Each user is represented by an id, and no other information is
+provided.
 
-[TBD: add techniques from data transformation, visualisation, modelling]
+Denoting the rating by any of these users $u$ of a certain movie $i$, the task
+is to predict ratings $Y_{u,i}$ of any such user/movie combination $(u,i)$. The
+challenge is that there are overall 71,567 users and 10,681 movies, yielding
+$71,567 \ times 10,681 = 764,407,127$ while only 10 million data points, so only
+about 1.3% (10/764.4) such data are available in totality and 10% (1 million) of
+the data must be held out as test set, leaving 1.2% (9/764.4) of data to train a
+rating prediction algorithm.
 
-## Data Structure and Loading
+To do so, the data are examined and modelled in [Section 3](#methods) which is
+further broken down into
+
+* [Section 3.1](#methods_techniques) to elaborate on the techniques used, in 
+particular in the modelling [Section 3.5](#methods_modelling).
+* [Section 3.2](#methods_data_structure) to provide an overview of the basic
+structure of the rating data.
+* [Section 3.3](#methods_data_cleaning) to perform data cleaning.
+* [Section 3.4](#methods_data_exp_vis) to visualise the most important 
+properties of the ratings with respect to individual movies, their genres
+or individual users. These properties then inspire the modelling methods
+in the subseqeuent section.
+* [Section 3.5](#methods_modelling) presents the models based on the most
+salient data properties and calibrates any free modelling parameters.
+
+The results of all models are summarised in [Section 4](#results) and the
+conclusions are drawn in [Section 5](#conclusion).
+
+# Methods and Analysis {#methods}
+
+## Process and Techniques Used {#methods_techniques}
+
+Two modelling techniques will be described, first the regularisation in 
+[Section 3.1.1](#method_regularisation) and then the local estimated scatterplot 
+smoothing (LOESS) method in [Section 3.1.2](#method_loess).
+
+### Regularisation {#method_regularisation}
+The modelling techniques employed are regularised least squared estimates.
+Specifically, a model of the form
+\[
+Y_{u,i} = \mu + b_i + \varepsilon_{u,i}
+\]
+for user $u$ and movie $i$ assumes that there is an overall average rating of
+$\mu$ across all movies. The $b_i$ is based on the observation that some movies
+are better rated than others, as will be shown in [Section
+3.4.2](#data_movie_effect). 
+However, as there are some movies that are rated by hundreds or more users, the
+ratings of these movies are more reliable than the ratings of movies that are
+only rated by a few users. To calculate such an effect, denote the number of
+ratings awarded to movie $i$ by $n_i$, the overall number of ratings as $N$ and
+the overall number of movies by $J$. Further, denote the overall average rating
+with $\mu$.
+
+Without any weighing of ratings for a movie by the number of ratings awarded to
+it, the goal is to minimise the MSE given by
+\[
+MSE = \frac{1}{N} \sum_{i=1}^J \sum_{u=1}^{n_i} (y_{u,i} - \hat{y}_{u,i})^2.
+\]
+As for any user $u$ and movie $i$ the modelled rating is given by 
+$\hat{y}_{u,i} = \mu + \hat{b}_i$, the MSE to minimise becomes
+\[
+MSE = \frac{1}{N} \sum_{i=1}^J \sum_{u=1}^{n_i} 
+\left( y_{u,i} - (\mu + \hat{b}_i) \right)^2.
+\]
+The necessary condition for a minimum is $\frac{\partial MSE}{\partial b_j}=0$
+for all $j=1,2, \ldots, J$ which leads to
+\[
+0 = -\frac{2}{N} \sum_{u=1}^{n_j} \left( y_{u,j} - (\mu + \hat{b}_j) \right)
+\quad (j=1,\ldots,J).
+\]
+This is equivalent to
+\[
+\hat{b}_j = \frac{1}{n_j} \sum_{u=1}^{n_j}(y_{u,j} - \mu) \quad (j=1,\ldots,J).
+\]
+To penalise estimates for movies that are only rated by a few users, the
+MSE to minimise then becomes
+\[
+MSE(\lambda) = \frac{1}{N} \left[
+\sum_{i=1}^J \sum_{u=1}^{n_i} (y_{u,i} - \hat{y}_{u,i})^2 +
+\lambda \sum_{i=1}^J b_i^2
+\right]
+\]
+with a regularisation parameter $\lambda \geq 0$. Again, the necessary condition
+for a minimum of MSE is $\frac{\partial MSE(\lambda)}{\partial b_j}=0$
+for all $j=1,2, \ldots, J$ which implies
+\[
+0 = -\sum_{u=1}^{n_j} \left( y_{u,j} - (\mu + \hat{b}_j) \right) +
+\lambda b_j
+\quad (j=1,\ldots,J).
+\]
+Solving for $\hat{b}_j$ yields
+\[
+\hat{b}_j = \frac{1}{n_j+\lambda} 
+\sum_{u=1}^{n_j}(y_{u,j} - \mu) \quad (j=1,\ldots,J).
+\]
+This solution is a minimum, since the second derivative (Hessian matrix) of the
+MSE function is a diagonal matrix, as 
+$\frac{\partial^2MSE}{\partial b_i \partial b_j} = 0$ for $i \neq j$ and
+$\frac{\partial^2MSE}{\partial b_i^2} = 2\frac{n_i+\lambda}{N} > 0$. There are
+only positive entries on the diagonal of this matrix, and with that it is
+positively definitive. So the solution for $\hat{b}_j$ provided above is
+a local minimum and as there are no other local optima (there is only one
+point at which the first partial derivative vanishes), it is also a global
+minimum.
+
+### Local Estimated Scatterplot Smoothing (LOESS) {#method_loess}
+Unlike standard local regression that fits a line to the whole data set,
+the locally estimated scatterplot smoothing (LOESS) estimates a regression
+line in a local window that is progressively moved through the data. The
+parameter of LOESS is the width of this window.
+
+## Data Structure and Loading {#methods_data_structure}
 The raw data is provided in two sets, called `edx` and `validation`.
 
 ### Sample Data {#data_sample_data}
@@ -87,7 +217,7 @@ and will be converted into a date & time format.
 2. The `genres` column contains one ore more genres for each movie, separated
 by a pipe (`|`) symbol, so they will be separated.
 
-## Data Cleaning
+## Data Cleaning {#methods_data_cleaning}
 ### Conversion of Timestamp to Date
 The `timestamp` column is converted to a date and time using the `as_datetime`
 function for both the `edx` and the `validation` dataset and stored in 
@@ -106,7 +236,7 @@ validation <- validation %>%
 ### Separation of Genres
 [TBD once needed]
 
-## Data Exploration and Visualisation
+## Data Exploration and Visualisation {#methods_data_exp_vis}
 
 ### General Data Distribution Properties
 The `edx` data set contains 9,000,055 data point, consisting of 10,677
@@ -146,20 +276,53 @@ edx_1000 %>%
           col = grey.colors(n = 1, start = 0, end = 1))
 ```
 
-- [TBD: Distribution of ratings by movie]
-- [TBD: Distribution of ratings by user]
-- [TBD: Distribution of ratings]
+There is a wide variety of the number of ratings by movie. Some movies are
+rated only up to 10 times, while others are rated thousands of times:
+```{r rating by movie, echo = FALSE}
+edx %>%
+    group_by(movieId) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = n)) +
+    scale_x_log10() +
+    geom_histogram(col = "black") +
+    labs(title = "Rating counts by movie", 
+         x = "Number of Ratings (log scale)")
+```
+
+Similarly, there are users that only rate a few movies while other rate
+hundreds or even thousands of movies:
+```{r rating by user, echo = FALSE}
+edx %>%
+    group_by(userId) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = n)) +
+    scale_x_log10() +
+    geom_histogram(bins = 40, col = "black") +
+    labs(title = "Rating counts by user", 
+         x = "Number of Ratings (log scale)")
+```
+
+The ratings most awared are three and four stars. In general, whole-star
+ratings are more frequently given than half-star ratings:
+```{r rating histogram, echo = FALSE}
+edx %>%
+    count(rating) %>%
+    ggplot(aes(x = factor(rating), y = n)) +
+    geom_bar(stat = "identity", width = 1, col = "black")+
+    labs(title = "Distribution of ratings - total",
+         x = "Rating", y = "Count") 
+```
 
 ### Movie Effect {#data_movie_effect}
+From 
 
-### User Effect
+### User Effect {#data_user_effect}
 
-### Time of rating
+### Time of Rating {#data_time_effect}
 [TBD: try different granularity, not only weeks]
 
-### Genre effect
+### Genre effect {#data_genre_effect}
 
-### Principal components
 
 ### Extrapolation Requirements Check
 To predict movie ratings and calculate the final RMSE, it must be considered 
@@ -184,7 +347,6 @@ validation %>%
     summarise(n = n())
 ```
 
-
 In addition, all genres, and even more specifically, all their combinations
 that are present in the `validation` set are also found in the `edx` set, 
 as this code shows:
@@ -197,7 +359,7 @@ validation %>%
 So with the given data set, no extrapolation to movies, users or genres needs
 to be made in predicting ratings and determining model performance.
 
-## Modelling Approach
+## Modelling Approach {#methods_modelling}
 The training of model parameters is generally done using k-fold 
 cross-validation. To do this, the `edx` data is split into a training and
 a validation set 
@@ -219,11 +381,11 @@ As seen in [Section 3.4.2](#data_movie_effect), there is an effect
 ### Additional Genre Effect
 
 
-# Results
+# Results {#results}
 Report on RMSE here
 
 
-# Conclusion
+# Conclusion {#conclusion}
 
 ```{r }
 # code goes here
