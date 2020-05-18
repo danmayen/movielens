@@ -5,6 +5,7 @@ date: "May 2020"
 header-includes:
    - \usepackage{hyperref}
    - \usepackage[usenames,dvipsnames]{xcolor}
+   - \usepackage{amsmath}
 output: 
     pdf_document:
         number_sections: true
@@ -20,6 +21,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(caret)
+library(gam)
 library(ggplot2)
 library(gridExtra)
 # Set to TRUE for final version, is kept at FALSE for quicker compiling
@@ -672,19 +674,370 @@ Y_{u,i} = \mu + b_i + \varepsilon_{u,i}
 \qquad (i=1,\ldots,J; u=1,\ldots,n_i),
 \]
 where $b_i$ is the effect (or bias) of movie $i$ across all users,
-and the residual values is $\varepsilon_{u,i}$.
+and the residual values is $\varepsilon_{u,i}$. As shown in 
+[Section 3.1.1](# method_regularisation), the estimator for the movie effect
+is given (for the special case of $\lambda=0$) by
+\[
+\hat b_i = \frac{1}{n_i} \sum_{u=1}^{n_i} \left( y_{u,i} - \hat\mu \right).
+\]
+
+This estimate is implemented by the following code with calculates the
+average rating $\hat\mu$ on the training set and then calculates for each
+movie $i$ the $\hat b_i$ according to the above formula. Finally, the
+estimates $\hat b_i$ are used to compute $\hat y_{u,i} = \hat\mu + \hat b_i$.
+```{r estimator movie effect}
+predict_movieb <- function(newdata) {
+    # calculate mean $\mu$ of overall `edx` training set
+    mu <- mean(edx$rating)
+
+    # estimate $b_i = y_{u,i} - \mu$ for each movie $i$.
+    b_i_tbl <- edx %>%
+        group_by(movieId) %>%
+        summarise(b_i = mean(rating - mu))
+
+    # look up $b_i$ for each movie to predict $\hat{y}_{u,i} = \mu + b_i$
+    pred_ratings <- newdata %>%
+        left_join(b_i_tbl, by = "movieId") %>%
+        mutate(y_hat = mu + b_i) %>% .$y_hat
+    return(pred_ratings)
+    }
+
+```
+
 
 ### User Effect Only
 We observed in [Section 3.4.3](#data_user_effect) an effect of users on the 
-rating.
+rating. Analogously to the movie effect, the user effect is expressed through
+the model
+\[
+Y_{u,i} = \mu + b_u + \varepsilon_{u,i} 
+\qquad (i=1,\ldots,J; u=1,\ldots,n_i),
+\]
+The user effect $b_u$ is estimated by the equation following 
+[Section 3.1.1](# method_regularisation):
+\[
+b_u = \frac{1}{J_u} \sum_{i=1}^{J_u} \left( y_{u,i} - \hat\mu \right),
+\]
+where $J_u$ is the number of ratings awared by user $u$ to all movies. The 
+code for the estimation of the user effect is implemented in the same way as
+for the movie effect:
+
+```{r estimator user effect}
+predict_userb <- function(newdata) {
+    # calculate mean $\mu$ of overall `edx` training set
+    mu <- mean(edx$rating)
+    
+    # estimate $\hat b_u = avg(y_{u,i} - \mu)$ for each movie $i$.
+    b_u_tbl <- edx %>%
+        group_by(userId) %>%
+        summarise(b_u = mean(rating - mu))
+    
+    # look up $b_u$ for each movie to predict $\hat{y}_{u,i} = \mu + \hat b_u$
+    pred_ratings <- newdata %>%
+        left_join(b_u_tbl, by = "userId") %>%
+        mutate(y_hat = mu + b_u) %>% .$y_hat
+    return(pred_ratings)
+    }
+```
+
 
 ### Combined Movie and User Effect
+Both effects from the previous section can be simply combined in the model
+\[
+Y_{u,i} = \mu + b_i + b_u + \varepsilon_{u,i}
+\qquad (i=1,\ldots,J; u=1,\ldots,n_i).
+\]
+
+First, the estimate for $b_i$ is calculate in the same way as for the movie
+effect only:
+\[
+\hat b_i = \frac{1}{n_i} \sum_{u=1}^{n_i} \left( y_{u,i} - \hat\mu \right).
+\]
+
+Then, the estimate for the user effect $b_u$ is calculated as the average
+once the movie effect is already stripped out:
+\[
+\hat b_u = \frac{1}{J_u} \sum_{i=1}^{J_u} 
+\left( y_{u,i} - \hat\mu - \hat b_i\right).
+\]
+
+These set of estimates $\hat \mu$, $\hat b_i$ and $\hat b_u$ are then used
+to predict the rating $\hat y_{u,i} = \hat \mu + \hat b_i + \hat b_u$. This
+successive estimation is implemented in the following code:
+
+```{r estimator combined movie and user effect}
+predict_movieuserb <- function(newdata) {
+    # calculate mean $\mu$ of overall `edx` training set
+    mu <- mean(edx$rating)
+    
+    # estimate $\hat b_i = avg(y_{u,i} - \mu)$ for each movie $i$.
+    b_i_tbl <- edx %>%
+        group_by(movieId) %>%
+        summarise(b_i = mean(rating - mu))
+    
+    # estimate $\hat b_u = avg(y_{u,i} - \mu - \hat b_i)$
+    b_u_tbl <- edx %>% 
+        left_join(b_i_tbl, by="movieId") %>%
+        group_by(userId) %>%
+        summarise(b_u = mean(rating - b_i - mu))
+
+    # apply to new data to calculate 
+    # $\hat \y_{u,i} = \hat\mu + \hat b_i + \hat b_u$
+    pred_ratings <- newdata %>%
+        left_join(b_i_tbl, by = "movieId") %>%
+        left_join(b_u_tbl, by = "userId") %>%
+        mutate(y_hat = mu + b_i + b_u) %>% .$y_hat
+    
+    return(pred_ratings)
+    }
+
+```
 
 
 ### Regularised Movie and User Effect
+There are still the same movie and user effects in the model
+\[
+Y_{u,i} = \mu + b_i + b_u + \varepsilon_{u,i}
+\qquad (i=1,\ldots,J; u=1,\ldots,n_i).
+\]
+
+However, the estimate is given by regularisation with the parameter 
+$\lambda>0$. In the boundary case of $\lambda = 0$, the estimate is the simple
+average. The larger $\lambda$ becomes, the more ratings that only occur a
+few times are penalised. The estimates for $\hat\mu$, $\hat b_i(\lambda)$ and 
+$\hat b_u(\lambda)$ are calculated successively:
+
+\[
+\hat \mu = \frac{1}{N} \sum_{u,i} y_{u,i}.
+\]
+\[
+\hat b_i(\lambda) = \frac{1}{\lambda + n_i} 
+\sum_{u=1}^{n_i} \left( y_{u,i} - \hat\mu \right) 
+\qquad (i=1,\ldots,J). \\
+\]
+\[
+\hat b_u(\lambda) = \frac{1}{\lambda +J_U} \sum_{i=1}^{J_u} 
+\left( y_{u,i} - \hat\mu - \hat b_i\right)
+\qquad \text{for all } u.
+\]
+
+In addition to simply combining the effect, the parameter $\lambda$ is tuned
+with k-fold cross-validation as explained at the beginning of 
+[Section 3.5](methods_modelling) in these steps:
+
+1. Repeat for $l = 1, 2, \ldots, k = 25$:
+    a) Estimate parameters $\hat\mu$, $\hat b_i(\lambda)$ and 
+    $\hat b_u(\lambda)$ on the $k$-th training set.
+    b) Calculate estimated ratings $\hat y_{u,i}(\lambda)$ on the $k$-th
+    validation set.
+    c) Use estimated ratings to compute $RMSE_l(\lambda)$ on the $k$-th 
+    validation set.
+2. Estimate the RMSE as 
+$\hat{RMSE}(\lambda) = \frac{1}{k} \sum_{l=1}^k RMSE_l(\lambda)$.
+
+Then repeat steps 1 through 2 for several values of $\lambda$ to find the
+$\lambda$ that minimises the (estimated) $RMSE$. Note that the final test set
+(which is confusingly named `validation`) is **not** used in the calculation to
+minimise the RMSE.
+
+Steps 1 and 2 of this algorithm are implemented in the following code:
+```{r reg movie user cross validation}
+#' Calculate RMSE using k-fold cross validation
+#' for regularised movie-user effect with regularisation parameter lambda
+#' 
+#' @param data Complete training data, to be split into (sub-)training
+#'        and validation data.
+#' @param ind_list List of $k$ indices of *validation* set.
+#' @param lambda Regularisation parameter $\lambda$. 
+#' @return Vector of RMSEs of length $k$
+RMSE_movieuser_kfold <- function(data, ind_list, lambda) {
+    n <- length(ind_list)
+    # iterate over indices
+    rmse_v <- sapply(1:n, function (listIdx) {
+        # split data int training and validation set
+        train_set <- data[-ind_list[[listIdx]], ]
+        validation_set <- data[ind_list[[listIdx]], ]
+        # use training set for regularised movie + user effects
+        mu <- mean(train_set$rating)
+        b_i_tbl <- train_set %>%
+            group_by(movieId) %>%
+            summarise(b_i = sum(rating - mu)/(n()+lambda))
+        b_u_tbl <- train_set %>% 
+            left_join(b_i_tbl, by="movieId") %>%
+            group_by(userId) %>%
+            summarise(b_u = sum(rating - b_i - mu)/(n()+lambda))
+        # modify test set so all movies and users from training
+        # set are contained in it
+        validation_set <- validation_set %>%
+            semi_join(train_set, by = "movieId") %>%
+            semi_join(train_set, by = "userId")
+        # if nothing left, can already return NA
+        if(length(validation_set) == 0) {
+            return(NA)
+        } else {
+            # otherwise estimate ratings as \mu + b_i + b_u
+            ratings_hat <- 
+                validation_set %>% 
+                left_join(b_i_tbl, by = "movieId") %>%
+                left_join(b_u_tbl, by = "userId") %>%
+                mutate(pred = mu + b_i + b_u) %>%
+                .$pred
+            #  and finally, calculate RMSE
+            return(RMSE(ratings_hat, validation_set$rating))
+            }
+        })
+    return(rmse_v)
+    }
+```
+
+Then the RMSE estimation is repeated for several values of 
+$\lambda = 0, 0.25, \ldots, 10.0$:
+
+```{r reg movie user tuning, eval = FALSE}
+# define sequence of $\lambda = 0, 0.25, \ldots, 10.0$
+lambdas <- seq(0, 10, 0.25)
+# calculate RMSEs for all these values of $\lambda$
+RMSE_data_mur <- map_df(lambdas, function(lambda) {
+    # calculate vector of RMSEs
+    rmse_vec <- RMSE_movieuser_kfold(edx, index_list, lambda)
+    # strip out the NA values
+    rmse_vec <- na.omit(rmse_vec)
+    # calculate mean and standard deviation of RMSEs
+    list(RMSE_avg = mean(rmse_vec),
+         RMSE_sd = sd(rmse_vec))
+    })
+
+# add lambda as first columns
+RMSE_data_mur <- cbind(data.frame(lambda = lambdas), 
+                       RMSE_data_mur)
+
+# look up lambda for which the RMSE is minimal
+lambda_mur_opt <- lambdas[which.min(RMSE_data_mur$RMSE_avg)]
+RMSE_lambda_opt <- RMSE_data_mur$RMSE_avg[which.min(RMSE_data_mur$RMSE_avg)]
+```
+
+Note that regularisation RMSE data are loaded from the file
+`RMSE_data_mur.Rdata` generated by the R code that accompanies this report, as
+re-running the tuning takes several hours.
+
+```{r load reg movie user RMSE, include = FALSE}
+load(file = "RMSE_data_mur.Rdata")
+```
+
+Plotting the RMSE for these values of $\lambda$ shows that the optimal
+values is $\lambda_{mur} =$  `r lambda_mur_opt`. 
+
+```{r reg movie user plot}
+RMSE_data_mur %>%
+    ggplot(aes(x = lambda, y = RMSE_avg)) +
+    geom_point() +
+    geom_vline(xintercept = lambda_mur_opt, linetype = "dashed") +
+    labs(y = "RMSE (with bootstrapped error)", 
+         title = "Tuning of movie/user lambda for regularisation")
+```
+
+Finally, since the optimal values of $\lambda$ has been determined, the
+prediction function is implemented:
+
+```{r estimator reg movie user}
+#' Prediction function for regularised movie/user effect
+#' 
+#' @param newdata Data for which to predict the ratings.
+#' @param lambda Regularisation parameter $\lambda$.
+#' @return Predicted ratings
+predict_regmovieuser <- function(newdata, lambda) {
+    # overall mean on training data
+    mu <- mean(edx$rating)
+    # tabulate movie effects "b_i" with regularisation
+    b_i_tbl <- edx %>%
+        group_by(movieId) %>%
+        summarise(b_i = sum(rating - mu)/(n()+lambda))
+    # tabulate user effects "b_u" with regularisation
+    b_u_tbl <- edx %>% 
+        left_join(b_i_tbl, by="movieId") %>%
+        group_by(userId) %>%
+        summarise(b_u = sum(rating - b_i - mu)/(n()+lambda))
+    # calculate rating prediction by looking up "b_i" and "b_u"
+    # from the tables just created and compute on the NEW data
+    # \mu + b_i + b_u
+    pred_ratings <- 
+        newdata %>% 
+        left_join(b_i_tbl, by = "movieId") %>%
+        left_join(b_u_tbl, by = "userId") %>%
+        mutate(pred = mu + b_i + b_u) %>%
+        .$pred
+    return(pred_ratings)
+    }
+```
 
 
 ### Additional Time Effect
+After movie and user effect had been stripped out, an additional time effect
+was observed in [Section 3.4.4](data_time_effect). The model then becomes
+\[
+Y_{u,i} = \mu + b_i + b_u + f(d_{u,i}) + \varepsilon_{u,i}
+\qquad (i=1,\ldots,J; u=1,\ldots,n_i),
+\]
+where $d_{u,i}$ is the date rounded to weeks of the rating and $f$ is a 
+smooth function. Since the plotting already used LOESS, the same method will
+be used here, see also [Section 3.1.2](#method_loess) 
+The model information for the `gamLoess` method 
+
+```{r}
+modelLookup("gamLoess")
+```
+
+says that `span` and `degree` can be tuned. The degree of the local regression
+is fine to leave at 1 (linear), and the span will be varied. The tuning of the
+`span` parameters is achieved with the `train` function of the `caret` 
+package, using the values for $d_{u,i}$ calculated in 
+[Section 3.4.4.2](#data_time_effect_res).
+
+```{r train loess, eval = FALSE}
+train_loess <- train(d_ui ~ rating_wk, data = d_ui_tbl, 
+                     method = "gamLoess",
+                     tuneGrid = data.frame(degree = 1,
+                                           span = seq(0.10, 0.60, 0.05)))
+```
+
+Note that since this tuning takes some time, the results are stored for this
+report and loaded from the file
+
+```{r load time effect model, include = FALSE}
+load(file = "train_loess.Rdata")
+```
+
+The optimal span parameters is $span_opt =$  `r train_loess$bestTune$span`
+as can be seen from the plot of the RMSE against this parameter:
+
+```{r time effect plot}
+# plot and look up best span parameter
+ggplot(train_loess, highlight = TRUE)
+span_opt <- train_loess$bestTune$span
+
+```
+
+That the time effect is smoothed is illustrated by plotting the residual
+
+```{r }
+# plot fit of best model to time effect
+d_ui_tbl %>%
+    mutate(d_ui_hat = predict(train_loess, newdata = .)) %>%
+    ggplot(aes(x = as.numeric(rating_wk))) +
+    geom_point(aes(y = d_ui), alpha = 0.5) +
+    geom_line(aes(y = d_ui_hat), col = "blue", size = 2) +
+    ylim(c(-0.1, 0.1)) +
+    labs(title = "Additional time effect fitted with LOESS",
+         x = "Weeks since 1 Sep 1995",
+         y = "Rating Effect")
+
+# fit model for prediction of RESIDUAL time effect
+fit_loess <- train_loess$finalModel
+
+```
+
+
+
 
 ### Additional Genre Effect
 
