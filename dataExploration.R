@@ -115,7 +115,7 @@ edx %>%
 10677 * 69878
 # 746,087,406
 
-# sparsity - code into appendix
+# sparsity
 n_movies_sub <- length(unique(edx_1000$movieId))
 n_users_sub <- length(unique(edx_1000$userId))
 edx_1000 %>%
@@ -134,7 +134,7 @@ edx %>%
     summarise(n = n()) %>%
     ggplot(aes(x = n)) +
     scale_x_log10() +
-    geom_histogram(col = "black") +
+    geom_histogram(bins = 30, col = "black") +
     labs(title = "Rating counts by movie", 
          x = "Number of Ratings (log scale)")
 
@@ -169,7 +169,7 @@ edx %>%
 # 3.4.2 Movie effect
 ################################################################################
 
-# distribution of ratings by movie
+# distribution of ratings by movie - in appendix
 movie_avgs <- edx %>%
     group_by(movieId) %>%
     summarise(movie_avg = mean(rating),
@@ -196,7 +196,7 @@ grid.arrange(p1, p2, nrow = 2)
 # 3.4.3 User effect
 ################################################################################
 
-# distribution of ratings by user
+# distribution of ratings by user - in appendix
 user_avgs <- edx %>%
     group_by(userId) %>%
     summarise(user_avg = mean(rating),
@@ -261,33 +261,8 @@ d_ui_tbl <- edx %>%
     group_by(rating_wk) %>%
     summarise(d_ui = mean(rating - mu - b_i - b_u))
 
-# List of tunable parameters in loess function "gamLoess"
-modelLookup("gamLoess")
-# -> span and degree
+# plot the overall time effect once movie and user effect are accounted for
 
-# control **for test run only**
-cvControl <- trainControl(method = "cv", number = 10, p = 0.9)
-
-# run with built-in, if crashes, program DIY version
-train_loess <- train(d_ui ~ rating_wk, data = d_ui_tbl, 
-                     method = "gamLoess",
-                     tuneGrid = data.frame(degree = 1,
-                                           span = seq(0.10, 0.60, 0.05)))
-
-# plot and look up best span parameter
-ggplot(train_loess, highlight = TRUE)
-span_opt <- train_loess$bestTune$span
-
-# plot fit of best model to time effect
-d_ui_tbl %>%
-    mutate(d_ui_hat = predict(train_loess, newdata = .)) %>%
-    ggplot(aes(x = as.numeric(rating_wk))) +
-    geom_point(aes(y = d_ui), alpha = 0.5) +
-    geom_line(aes(y = d_ui_hat), col = "blue", size = 2) +
-    ylim(c(-0.1, 0.1)) +
-    labs(title = "Additional time effect fitted with LOESS",
-         x = "Weeks since 1 Sep 1995",
-         y = "Rating Effect")
 
 
 ################################################################################
@@ -353,6 +328,27 @@ validation %>%
 set.seed(342, sample.kind = "Rounding")
 index_list <- createFolds(edx$rating, k = 25)
 
+# visualisation of training data (edx) and test data validation, with 
+# training data further split into training sets and test sets under a
+# k-fold cross-validation with k = 25
+n_data <- nrow(edx)
+validation_split <- data.frame(
+    k = seq(1, 25, 1),
+    C = seq(0, 24, 1) / 25 * n_data,
+    B = rep(1/25 * n_data, time = 25))
+validation_split <- validation_split %>%
+    mutate(A = n_data - B - C)
+validation_split <- validation_split %>%
+    gather(set, value, -k) 
+
+validation_split %>%
+    ggplot(aes(x = k, y = value, fill = set)) +
+    scale_fill_manual(values = c("#ACE5EE", "#FAF0BE", "#ACE5EE")) +
+    theme(plot.margin = margin(0,0,0,0, "cm")) +
+    geom_bar(stat = "identity", position = "stack", show.legend = FALSE) +
+    labs(title = "Illustration of k-fold cross validation (k = 25)",
+         y = "Values")
+    
 ################################################################################
 # 3.5.1 Constant Value
 ################################################################################
@@ -549,6 +545,34 @@ predict_regmovieuser <- function(newdata, lambda) {
 ################################################################################
 # 3.5.5 Additional Time Effect
 ################################################################################
+
+# List of tunable parameters in loess function "gamLoess"
+modelLookup("gamLoess")
+# -> span and degree
+
+# control **for test run only**
+cvControl <- trainControl(method = "cv", number = 10, p = 0.9)
+
+# run with built-in cross-validation
+train_loess <- train(d_ui ~ rating_wk, data = d_ui_tbl, 
+                     method = "gamLoess",
+                     tuneGrid = data.frame(degree = 1,
+                                           span = seq(0.10, 0.60, 0.05)))
+
+# plot and look up best span parameter
+ggplot(train_loess, highlight = TRUE)
+span_opt <- train_loess$bestTune$span
+
+# plot fit of best model to time effect
+d_ui_tbl %>%
+    mutate(d_ui_hat = predict(train_loess, newdata = .)) %>%
+    ggplot(aes(x = as.numeric(rating_wk))) +
+    geom_point(aes(y = d_ui), alpha = 0.5) +
+    geom_line(aes(y = d_ui_hat), col = "blue", size = 2) +
+    ylim(c(-0.1, 0.1)) +
+    labs(title = "Additional time effect fitted with LOESS",
+         x = "Weeks since 1 Sep 1995",
+         y = "Rating Effect")
 
 # fit model for prediction of RESIDUAL time effect
 fit_loess <- train_loess$finalModel
@@ -794,7 +818,8 @@ RMSE_rating(ratings_hat_rmu_g, validation$rating)
 ################################################################################
 ################################################################################
 # save.image(file = "movielens_20200515.Rdata")
-save.image(file = "movielens_20200517.Rdata")
+# save.image(file = "movielens_20200517.Rdata")
+save.image(file = "movielens_20200518.Rdata")
 
 # load on demand
 # load(file = "movielens_20200515.Rdata")

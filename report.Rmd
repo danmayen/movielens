@@ -2,8 +2,11 @@
 title: "MovieLens Project"
 author: "Dr Daniel Mayenberger"
 date: "May 2020"
+header-includes:
+   - \usepackage{hyperref}
+   - \usepackage{xcolor}
 output: 
-    html_document:
+    pdf_document:
         number_sections: true
 ---
 
@@ -18,6 +21,7 @@ library(tidyverse)
 library(lubridate)
 library(caret)
 library(ggplot2)
+library(gridExtra)
 # Set to TRUE for final version, is kept at FALSE for quicker compiling
 # of drafts
 FINAL_VERSION = FALSE
@@ -32,6 +36,10 @@ if(FINAL_VERSION) {
     }
 ```
 
+\hypersetup {
+    linkcolor=green
+    urlcolor=cyan
+    }
 
 # Executive Summary
 Given over 10,000 movies and about 70,000 users that have rated some of these
@@ -73,7 +81,7 @@ about 1.3% (10/764.4) such data are available in totality and 10% (1 million) of
 the data must be held out as test set, leaving 1.2% (9/764.4) of data to train a
 rating prediction algorithm.
 
-To do so, the data are examined and modelled in [Section 3](#methods) which is
+To do so, the data are examined and modelled in [**Section 3**](#methods) which is
 further broken down into
 
 * [Section 3.1](#methods_techniques) to elaborate on the techniques used, in 
@@ -258,11 +266,15 @@ n_movies_sub <- length(unique(edx_1000$movieId))
 n_users_sub <- length(unique(edx_1000$userId))
 ```
 
+For better readability, the code for the subsequent graphs in this Section
+are displayed in \hyperlink{appendix_figures}{Appendix A}.
+
+#### Data Sparsity {#data_sparsity_figure}
 Within the sample of 1,000 ratings drawn as described in 
 [Section 3.2.1](#data_sample_data) there are already `r n_movies_sub`
 different movies and `r n_users_sub` different users. Plotting the
 data points of this matrix shows that the data given are very sparse 
-but at least evenly distributed among movies and users:
+but at least evenly distributed among movies and users.
 
 ```{r data matrix of subset, echo = FALSE}
 edx_1000 %>%
@@ -276,21 +288,31 @@ edx_1000 %>%
           col = grey.colors(n = 1, start = 0, end = 1))
 ```
 
+The code is shown \hyperlink{code_sparsity_figure}{here}.
+
+#### Ratings by Movie {#data_ratings_by_movie_figure}
+
 There is a wide variety of the number of ratings by movie. Some movies are
 rated only up to 10 times, while others are rated thousands of times:
+
 ```{r rating by movie, echo = FALSE}
 edx %>%
     group_by(movieId) %>%
     summarise(n = n()) %>%
     ggplot(aes(x = n)) +
     scale_x_log10() +
-    geom_histogram(col = "black") +
+    geom_histogram(bins = 30, col = "black") +
     labs(title = "Rating counts by movie", 
          x = "Number of Ratings (log scale)")
 ```
 
+The code is shown \hyperlink{code_ratings_by_movie_figure}{here}.
+
+#### Ratings by User {#data_ratings_by_user_figure}
+
 Similarly, there are users that only rate a few movies while other rate
 hundreds or even thousands of movies:
+
 ```{r rating by user, echo = FALSE}
 edx %>%
     group_by(userId) %>%
@@ -302,8 +324,13 @@ edx %>%
          x = "Number of Ratings (log scale)")
 ```
 
+The code is shown \hyperlink{code_ratings_by_user_figure}{here}.
+
+#### Distribution of Ratings {#data_ratings_distribution_figure}
+
 The ratings most awared are three and four stars. In general, whole-star
 ratings are more frequently given than half-star ratings:
+
 ```{r rating histogram, echo = FALSE}
 edx %>%
     count(rating) %>%
@@ -313,15 +340,97 @@ edx %>%
          x = "Rating", y = "Count") 
 ```
 
+The code is displayed \hyperlink{code_ratings_distribution_figure}{here}.
+
 ### Movie Effect {#data_movie_effect}
-From 
+From public movie ratings such as [Rotten
+Tomatoes](https://www.rottentomatoes.com/) it is known that some movies are in
+general better rated than others. We group the ratings by movie ID to 
+evaluate the same effect. In addition to the average rating for each movie,
+the standard deviation of ratings for the same movie is visualised in parallel.
+
+```{r dist rating by movie, echo = FALSE}
+# distribution of ratings by movie
+movie_avgs <- edx %>%
+    group_by(movieId) %>%
+    summarise(movie_avg = mean(rating),
+              movie_sd = ifelse(n()>1,sd(rating),0),
+              n_ratings_bymovie = n()) %>%
+    arrange(movie_avg) %>%
+    mutate(row = row_number(movie_avg))
+
+# plot average of ratings and their
+# standard deviation, horizontally aligned
+p1 <- movie_avgs %>%
+    ggplot(aes(x = row, y = movie_avg)) +
+    geom_point() +
+    labs(x = "Movie (sorted by average rating)", 
+         y = "Average Rating", title = "Ratings by movie")
+p2 <- movie_avgs %>%
+    ggplot(aes(x = row, y = movie_sd)) +
+    geom_point() +
+    labs(x = "Movie (sorted by average rating)",
+         y = "Rating Standard Deviation")
+grid.arrange(p1, p2, nrow = 2)
+```
+The code for this chart is \hyperlink{code_dist_ratings_by_movie}{here}.
+
+So there are indeed movies that, on average:
+
+* are rated worse than other movies, on the left side of the chart.
+* are rated better than other movies, towards the right of the chart.
+
+At the same time, there is a high variability of this *movie effect*, 
+illustrated by the broad range of the standard deviation in the 
+lower half of the figure. Standard deviation of ratings by movie hovers around
+the value of one (star).
 
 ### User Effect {#data_user_effect}
+Similar to the movie effect, different users may have the tendency to award
+higher or lower ratings, compared to other users.
+
+```{r dist rating by user, echo = FALSE}
+# distribution of ratings by user
+user_avgs <- edx %>%
+    group_by(userId) %>%
+    summarise(user_avg = mean(rating),
+              user_sd = ifelse(n()>1,sd(rating),0),
+              n_ratings_byuser = n()) %>%
+    arrange(user_avg) %>%
+    mutate(row = row_number(user_avg))
+
+# plot average of ratings and their
+# standard deviation, horizontally aligned
+p1 <- user_avgs %>%
+    ggplot(aes(x = row, y = user_avg)) +
+    geom_point() +
+    labs(x = "User (sorted by average rating)", 
+         y = "Average Rating", title = "Ratings by user")
+p2 <- user_avgs %>%
+    ggplot(aes(x = row, y = user_sd)) +
+    geom_point() +
+    labs(x = "User (sorted by average rating)",
+         y = "Rating Standard Deviation")
+grid.arrange(p1, p2, nrow = 2)
+```
+The code for this chart is \hyperlink{code_dist_ratings_by_user}{here}.
+
+So similarly to the movie effect, there is a *user effect* with users that 
+tend to assign movies lower rating on the left hand side of the chart and
+users that rate movies more highly towards the right. In constrast to the
+*movie effect* there is much higher variability of rating, consistent with
+users differentiating between good and bad movies.
+
 
 ### Time of Rating {#data_time_effect}
-[TBD: try different granularity, not only weeks]
+Another feature that may influence the rating is the date and time at which
+the rating was awarded. When averaging all ratings within a week and following
+this average with a LOESS function, the following pattern emerges:
 
-### Genre effect {#data_genre_effect}
+So there is a small effect that is worth capturing.
+
+
+### Genre Effect {#data_genre_effect}
 
 
 ### Extrapolation Requirements Check
@@ -362,16 +471,86 @@ to be made in predicting ratings and determining model performance.
 ## Modelling Approach {#methods_modelling}
 The training of model parameters is generally done using k-fold 
 cross-validation. To do this, the `edx` data is split into a training and
-a validation set 
+a validation set $k$ times. 
+
+Graphically, k-fold validation can be illustrated by $k$ subsequent splits of
+the overall `edx` set into training sets (shown in blue) and test sets (shown in
+purple).
+
+```{r kfold crossvalidation, echo = FALSE}
+n_data <- nrow(edx)
+validation_split <- data.frame(
+    k = seq(1, 25, 1),
+    C = seq(0, 24, 1) / 25 * n_data,
+    B = rep(1/25 * n_data, time = 25))
+validation_split <- validation_split %>%
+    mutate(A = n_data - B - C)
+validation_split <- validation_split %>%
+    gather(set, value, -k) 
+
+validation_split %>%
+    ggplot(aes(x = k, y = value, fill = set)) +
+    scale_fill_manual(values = c("#ACE5EE", "#FAF0BE", "#ACE5EE")) +
+    theme(plot.margin = margin(0,0,0,0, "cm")) +
+    geom_bar(stat = "identity", position = "stack", show.legend = FALSE) +
+    labs(title = "Illustration of k-fold cross validation (k = 25)",
+         y = "Values")
+```
+\definecolor{blizzardblue}{rgb}{0.67, 0.9, 0.93}
+\definecolor{blond}{rgb}{0.98, 0.94, 0.75}
+
+For example, the parameter $\lambda$ is applied to the
+\colorbox{blizzardblue}{training data} and the RMSE that results from that
+particular values of $\lambda$ is evaluated in the 
+\colorbox{blond}{test data}.
+
+The **performance** of each algorithm is evaluated using the RMSE which is
+implemented in the function `RMSE_rating`:
+
+```{r RMSE function}
+RMSE_rating <- function(pred_ratings, true_ratings) {
+    ifelse(length(pred_ratings) > 0,
+           sqrt(mean((pred_ratings - true_ratings)^2)),
+           NA)
+    }
+```
 
 ### Constant Value
 
+This is the simplest baseline model that assumes that the rating is the
+same every time. The model is
+\[
+Y_{u,i} = \mu + \varepsilon_{u,i}
+\qquad (i=1,\ldots,J; u=1,\ldots,n_i),
+\]
+The parameter $\mu$ is estimated as average across all ratings:
+\[
+\hat{\mu} = \frac{1}{N} \sum_{u,i} y_{u,i}.
+\]
+
+The R implementation of this model is given by a function that returns the
+same value for each record of the requested data set:
+```{r estimator const}
+
+```
+
+
 ### Movie Effect Only
-As seen in [Section 3.4.2](#data_movie_effect), there is an effect
+As seen in [Section 3.4.2](#data_movie_effect), there is an effect of 
+individual movies on the rating. In terms of the model,
+\[
+Y_{u,i} = \mu + b_i + \varepsilon_{u,i}
+\qquad (i=1,\ldots,J; u=1,\ldots,n_i),
+\]
+where $b_i$ is the effect (or bias) of movie $i$ across all users,
+and the residual values is $\varepsilon_{u,i}$.
 
 ### User Effect Only
+We observed in [Section 3.4.3](#data_user_effect) an effect of users on the 
+rating.
 
 ### Combined Movie and User Effect
+
 
 ### Regularised Movie and User Effect
 
@@ -386,13 +565,134 @@ Report on RMSE here
 
 
 # Conclusion {#conclusion}
+[TBD: write conclusion]
 
-```{r }
-# code goes here
-```
+\newpage
+\fontsize{14}{16}\selectfont{\textbf{Appendix A - Code of Figures}}
 
-\fontsize{14}{16}\selectfont{\textbf{Appendix A}}
+\hypertarget{appendix_figures} To enhance readibility of the report, the code
+for most figures in [Section 3.4](methods_data_exp_vis) is shown in this
+Appendix.
 
 \fontsize{12}{14}\selectfont{}
-normal text
+\textbf{Figures in Section 3.4.1 - General Data Distribution}
+
+\hypertarget{code_sparsity_figure}
+Code for *data sparsity* figure shown [here](#data_sparsity_figure):
+
+```{r code data matrix of subset, eval = FALSE}
+edx_1000 %>%
+    mutate(rating = 1) %>%
+    select(movieId, userId, rating) %>%
+    spread(movieId, rating) %>% 
+    column_to_rownames(var = "userId") %>% 
+    as.matrix() %>% t() %>%
+    image(x = 1:n_movies_sub, y = 1:n_users_sub, z = ., 
+          xlab = "Movies", ylab = "Users",
+          col = grey.colors(n = 1, start = 0, end = 1))
+```
+
+\hypertarget{code_ratings_by_movie_figure}
+Code for *ratings counts by movie* figure shown 
+[here](#data_ratings_by_movie_figure):
+```{r code rating by movie, eval = FALSE}
+edx %>%
+    group_by(movieId) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = n)) +
+    scale_x_log10() +
+    geom_histogram(bins = 30, col = "black") +
+    labs(title = "Rating counts by movie", 
+         x = "Number of Ratings (log scale)")
+```
+
+\hypertarget{code_ratings_by_user_figure}
+Code for *rating counts by user* figure shown 
+[here](#data_ratings_by_user_figure):
+```{r code rating by user, eval = FALSE}
+edx %>%
+    group_by(userId) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = n)) +
+    scale_x_log10() +
+    geom_histogram(bins = 40, col = "black") +
+    labs(title = "Rating counts by user", 
+         x = "Number of Ratings (log scale)")
+```
+
+\hypertarget{code_ratings_distribution_figure}
+Code for *distribution of ratings - total* histogram shown [here](#data_ratings_distribution_figure):
+```{r code rating histogram, eval = FALSE}
+edx %>%
+    count(rating) %>%
+    ggplot(aes(x = factor(rating), y = n)) +
+    geom_bar(stat = "identity", width = 1, col = "black")+
+    labs(title = "Distribution of ratings - total",
+         x = "Rating", y = "Count") 
+```
+
+\textbf{Figure in Section 3.4.2 - Movie Effect}
+
+\hypertarget{code_dist_ratings_by_movie}
+Code for *movie effect* chart shown [here](#data_movie_effect):
+```{r code dist rating by movie, eval = FALSE}
+# distribution of ratings by movie
+movie_avgs <- edx %>%
+    group_by(movieId) %>%
+    summarise(movie_avg = mean(rating),
+              movie_sd = ifelse(n()>1,sd(rating),0),
+              n_ratings_bymovie = n()) %>%
+    arrange(movie_avg) %>%
+    mutate(row = row_number(movie_avg))
+
+# plot average of ratings and their
+# standard deviation, horizontally aligned
+p1 <- movie_avgs %>%
+    ggplot(aes(x = row, y = movie_avg)) +
+    geom_point() +
+    labs(x = "Movie (sorted by average rating)", 
+         y = "Average Rating", title = "Ratings by movie")
+p2 <- movie_avgs %>%
+    ggplot(aes(x = row, y = movie_sd)) +
+    geom_point() +
+    labs(x = "Movie (sorted by average rating)",
+         y = "Rating Standard Deviation")
+grid.arrange(p1, p2, nrow = 2)
+```
+
+\textbf{Figure in Section 3.4.3 - User Effect}
+
+\hypertarget{code_dist_ratings_by_user}
+Code for *user effect* chart shown [here](#data_user_effect):
+```{r code dist rating by user, eval = FALSE}
+# distribution of ratings by user - in appendix
+user_avgs <- edx %>%
+    group_by(userId) %>%
+    summarise(user_avg = mean(rating),
+              user_sd = ifelse(n()>1,sd(rating),0),
+              n_ratings_byuser = n()) %>%
+    arrange(user_avg) %>%
+    mutate(row = row_number(user_avg))
+
+# plot average of ratings and their
+# standard deviation, horizontally aligned
+p1 <- user_avgs %>%
+    ggplot(aes(x = row, y = user_avg)) +
+    geom_point() +
+    labs(x = "User (sorted by average rating)", 
+         y = "Average Rating", title = "Ratings by user")
+p2 <- user_avgs %>%
+    ggplot(aes(x = row, y = user_sd)) +
+    geom_point() +
+    labs(x = "User (sorted by average rating)",
+         y = "Rating Standard Deviation")
+grid.arrange(p1, p2, nrow = 2)
+```
+
+\textbf{Figures in Section 3.4.4 - Time of Rating}
+
+
+\textbf{Figures in Section 3.4.5 - Genre Effect}
+
+
 Continued normal text
