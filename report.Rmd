@@ -4,7 +4,7 @@ author: "Dr Daniel Mayenberger"
 date: "May 2020"
 header-includes:
    - \usepackage{hyperref}
-   - \usepackage{xcolor}
+   - \usepackage[usenames,dvipsnames]{xcolor}
 output: 
     pdf_document:
         number_sections: true
@@ -76,10 +76,10 @@ provided.
 Denoting the rating by any of these users $u$ of a certain movie $i$, the task
 is to predict ratings $Y_{u,i}$ of any such user/movie combination $(u,i)$. The
 challenge is that there are overall 71,567 users and 10,681 movies, yielding
-$71,567 \ times 10,681 = 764,407,127$ while only 10 million data points, so only
-about 1.3% (10/764.4) such data are available in totality and 10% (1 million) of
-the data must be held out as test set, leaving 1.2% (9/764.4) of data to train a
-rating prediction algorithm.
+$71,567 \times 10,681 = 764,407,127$ while only 10 million data points, so only
+about 1.3% $(=10/764.4)$ such data are available in totality and 10% (1 million)
+of the data must be held out as test set, leaving 1.2% $(=9/764.4)$ of data to
+train a rating prediction algorithm.
 
 To do so, the data are examined and modelled in [**Section 3**](#methods) which is
 further broken down into
@@ -427,11 +427,137 @@ Another feature that may influence the rating is the date and time at which
 the rating was awarded. When averaging all ratings within a week and following
 this average with a LOESS function, the following pattern emerges:
 
-So there is a small effect that is worth capturing.
+#### Overall Time Effect {#data_time_effect_total}
+```{r rating by time, echo = FALSE}
+edx %>%
+    mutate(ratingdate_wk = round_date(ratingdate, unit = "week")) %>%
+    group_by(ratingdate_wk) %>%
+    summarise(rating_wk = mean(rating)) %>%
+    ggplot(aes(x = ratingdate_wk, y = rating_wk)) +
+    geom_point() +
+    geom_smooth(formula = y ~ x, method = "loess") +
+    labs(title = "Rating by date",
+         x = "Rating date (granularity of weeks)",
+         y = "Rating")
+```
+  
+The code for this chart is \hyperlink{code_ratings_by_time}{here}.
 
+So there is a small effect that is worth capturing, as a smooth function
+of time. 
+
+#### Residual Time Effect {#data_time_effect_res}
+
+Since the effect will be modelled after movie effect and user
+effect are accounted for, it is also informative to plot the residual
+effect.
+
+```{r residual time effect, echo = FALSE}
+min_date = min(edx$ratingdate)
+lambda_mur <- 5.0
+# Calculate regularised movie user and time effect, see 
+mu <- mean(edx$rating)
+# Movie effect
+b_i_tbl <- edx %>%
+    group_by(movieId) %>%
+    summarise(b_i = sum(rating - mu)/(n()+lambda_mur))
+# User effect
+b_u_tbl <- edx %>% 
+    left_join(b_i_tbl, by="movieId") %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_i - mu)/(n()+lambda_mur))
+# Residual time effect
+d_ui_tbl <- edx %>%
+    mutate(ratingdate_wk = round_date(ratingdate, unit = "week")) %>%
+    mutate(rating_wk = (ratingdate_wk - min_date)/7) %>%
+    left_join(b_i_tbl, by = "movieId") %>%
+    left_join(b_u_tbl, by = "userId") %>%
+    group_by(rating_wk) %>%
+    summarise(d_ui = mean(rating - mu - b_i - b_u))
+
+# plot the overall time effect once movie and user effect are accounted for
+d_ui_tbl %>%
+    ggplot(aes(x = as.numeric(rating_wk), y = d_ui)) +
+    geom_point() +
+    geom_smooth(formula = y ~ x, method = "loess") +
+    labs(title = "Residual time effect of ratings",
+         x = paste0("Weeks since ",format(min_date, "%d %b %Y")),
+         y = "Residual rating effect (stars)")
+
+```
+
+The code for this figure can be found 
+\hyperlink{code_ratings_by_time_res}{here}.
+
+In comparison to the total effect, the residual time effect is:
+
+* much stronger in the first 2 years, after `r format(min_date, "%d %b %Y")`.
+* considerable flatter after the the first 2 years.
 
 ### Genre Effect {#data_genre_effect}
 
+As final feature, we investigate whether certain genres (or their combinations)
+are rated differently from others. First, we determine whether genres have
+sufficiently many ratings by examining the distribution of the number of
+ratings by genre:
+
+```{r genre number of ratings, echo = FALSE}
+edx %>%
+    group_by(genres) %>%
+    summarise(rating_avg = mean(rating),
+              nratings = n()) %>%
+    arrange(nratings) %>%
+    ggplot(aes(x = nratings)) +
+    scale_x_log10() +
+    geom_histogram(bins = 30, col = "black")
+```
+
+The code for this figure is shown \hyperlink{code_nratings_by_genre}{here}.
+
+So there are definitely sufficiently many genres with 1,000 or more ratings.
+In the same way as for movies and users, we group the rating by genres for
+all genres with over 1,000 rating and chart their average rating and standard 
+deviation.
+
+```{r ratings by genre, echo = FALSE}
+p1 <- edx %>%
+    select(genres, rating) %>%
+    mutate(genres = reorder(genres, rating, mean)) %>%
+    group_by(genres) %>%
+    summarise(rating_avg = mean(rating),
+              rating_sd = sd(rating),
+              nratings = n()) %>%
+    filter(nratings >= 1000) %>%
+    ggplot(aes(x = genres, y = rating_avg)) +
+    scale_y_log10() +
+    theme(axis.text.x = element_text("")) +
+    geom_point() +
+    labs(title = "Ratings by genres (with at least 1000 ratings)",
+         x = "Genre (sorted by average rating)",
+         y = "Average Rating")
+
+p2 <- edx %>%
+    select(genres, rating) %>%
+    mutate(genres = reorder(genres, rating, mean)) %>%
+    group_by(genres) %>%
+    summarise(rating_avg = mean(rating),
+              rating_sd = sd(rating),
+              nratings = n()) %>%
+    filter(nratings >= 1000) %>%
+    ggplot(aes(x = genres, y = rating_sd)) +
+    scale_y_log10() +
+    theme(axis.text.x = element_text("")) +
+    geom_point() +
+    labs(title = "",
+         x = "Genre (sorted by average rating)",
+         y = "Rating Standard Deviation")
+
+grid.arrange(p1, p2, nrow = 2)
+```
+The code for this chart is shown \hyperlink{code_ratings_by_genre}{here}.
+
+So the genre combination does have an effect on the rating, in a similar way
+as movies and users do.
 
 ### Extrapolation Requirements Check
 To predict movie ratings and calculate the final RMSE, it must be considered 
@@ -531,7 +657,10 @@ The parameter $\mu$ is estimated as average across all ratings:
 The R implementation of this model is given by a function that returns the
 same value for each record of the requested data set:
 ```{r estimator const}
-
+predict_const <- function(newdata) {
+    mu <- mean(edx$rating)
+    return(rep(mu, nrow(newdata)))
+    }
 ```
 
 
@@ -691,8 +820,108 @@ grid.arrange(p1, p2, nrow = 2)
 
 \textbf{Figures in Section 3.4.4 - Time of Rating}
 
+\hypertarget{code_ratings_by_time}
+Code for *time effect* chart shown [here](#data_time_effect_total):
+```{r code rating by time, eval = FALSE}
+# tabulate rating by time
+ edx %>%
+    mutate(ratingdate_wk = round_date(ratingdate, unit = "week")) %>%
+    group_by(ratingdate_wk) %>%
+    summarize(rating_wk = mean(rating))
+    ggplot(aes(x = ratingdate_wk, y = rating_wk)) +
+    geom_point() +
+    geom_smooth()
+```
+
+\hypertarget{code_ratings_by_time_res}
+Code for *residual time effect* once movie and user effect are stripped out,
+in chart shown [here](#data_time_effect_res):
+```{r code residual time effect, eval = FALSE}
+min_date = min(edx$ratingdate)
+lambda_mur <- 5.0
+# Calculate regularised movie user and time effect, see 
+mu <- mean(edx$rating)
+# Movie effect
+b_i_tbl <- edx %>%
+    group_by(movieId) %>%
+    summarise(b_i = sum(rating - mu)/(n()+lambda_mur))
+# User effect
+b_u_tbl <- edx %>% 
+    left_join(b_i_tbl, by="movieId") %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_i - mu)/(n()+lambda_mur))
+# Residual time effect
+d_ui_tbl <- edx %>%
+    mutate(ratingdate_wk = round_date(ratingdate, unit = "week")) %>%
+    mutate(rating_wk = (ratingdate_wk - min_date)/7) %>%
+    left_join(b_i_tbl, by = "movieId") %>%
+    left_join(b_u_tbl, by = "userId") %>%
+    group_by(rating_wk) %>%
+    summarise(d_ui = mean(rating - mu - b_i - b_u))
+
+# plot the overall time effect once movie and user effect are accounted for
+d_ui_tbl %>%
+    ggplot(aes(x = as.numeric(rating_wk), y = d_ui)) +
+    geom_point() +
+    geom_smooth(formula = y ~ x, method = "loess") +
+    labs(title = "Residual time effect of ratings",
+         x = paste0("Weeks since ",format(min_date, "%d %b %Y")),
+         y = "Residual rating effect (stars)")
+```
+
 
 \textbf{Figures in Section 3.4.5 - Genre Effect}
 
+\hypertarget{code_nratings_by_genre}
+The code for the first chart in [Section 3.4.5](data_genre_effect) is:
+```{r code genre number of ratings, eval = FALSE}
+edx %>%
+    group_by(genres) %>%
+    summarise(rating_avg = mean(rating),
+              nratings = n()) %>%
+    arrange(nratings) %>%
+    ggplot(aes(x = nratings)) +
+    scale_x_log10() +
+    geom_histogram(bins = 30, col = "black")
+```
 
-Continued normal text
+\hypertarget{code_ratings_by_genre}
+The code for the second chart is:
+```{r code ratings by genre, eval = FALSE}
+# First chart - average ratings by genres, in ascending order
+p1 <- edx %>%
+    select(genres, rating) %>%
+    mutate(genres = reorder(genres, rating, mean)) %>%
+    group_by(genres) %>%
+    summarise(rating_avg = mean(rating),
+              rating_sd = sd(rating),
+              nratings = n()) %>%
+    filter(nratings >= 1000) %>%
+    ggplot(aes(x = genres, y = rating_avg)) +
+    scale_y_log10() +
+    theme(axis.text.x = element_text("")) +
+    geom_point() +
+    labs(title = "Ratings by genres (with at least 1000 ratings)",
+         x = "Genre (sorted by average rating)",
+         y = "Average Rating")
+
+# Second chart - standard dev of ratings by genre, genres need to
+# be in same order as in first chart
+p2 <- edx %>%
+    select(genres, rating) %>%
+    mutate(genres = reorder(genres, rating, mean)) %>%
+    group_by(genres) %>%
+    summarise(rating_avg = mean(rating),
+              rating_sd = sd(rating),
+              nratings = n()) %>%
+    filter(nratings >= 1000) %>%
+    ggplot(aes(x = genres, y = rating_sd)) +
+    scale_y_log10() +
+    theme(axis.text.x = element_text("")) +
+    geom_point() +
+    labs(title = "",
+         x = "Genre (sorted by average rating)",
+         y = "Rating Standard Deviation")
+
+grid.arrange(p1, p2, nrow = 2)
+```
