@@ -44,8 +44,8 @@ edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
-# save extracted data to file
-# save.image(file = "data//dslabs_movielens.Rdata")
+# save extracted data to file for later quick retrieval
+save.image(file = "data//dslabs_movielens.Rdata")
 
 # save extracts for quick exploration / code trials
 set.seed(123, sample.kind = "Rounding")

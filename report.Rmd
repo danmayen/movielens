@@ -31,15 +31,29 @@ FINAL_VERSION = FALSE
 
 # load data from local repository
 if(FINAL_VERSION) {
-    source("loadLocalData.R")
+    if(!exists("edx") | !exists("validation")) {
+        print("Loading data sets 'edx' and 'validation'...")
+        load(file = "data//dslabs_movielens.Rdata")
+        print("Done!")
+    } else {
+        print("Data 'edx' and 'validation' already loaded")
+        }
 } else {
-    source("loadLocalSampleData.R")
+    if(!exists("edx_1000") | !exists("validation_1000")) {
+        print("Loading data sets 'edx_1000' and 'validation_1000'...")
+        load(file = "data//dslabs_movielens_extract.Rdata")
+        print("Done!")
+    } else {
+        print("Data 'edx_1000' and 'validation_1000' already loaded")
+        }
+    # assign to "full data" FOR TESTING
     edx <- edx_1000
     validation <- validation_1000
     }
 ```
 
-\newcommand{\blueref}[1]{\textcolor{blue}{\autoref{#1}}}
+<!--\newcommand{\blueref}[1]{\textcolor{blue}{\autoref{#1}}}-->
+\newcommand{\blueref}[2]{\href{#1}{\textcolor{blue}{#2}}}
 \newcommand{\greenref}[1]
 {\color{green}\underline{{\color{black}\autoref{#1}}}\color{black}{}}
 \newcommand{\greenuline}[1]
@@ -47,49 +61,53 @@ if(FINAL_VERSION) {
 
 # Executive Summary
 Given over 10,000 movies and about 70,000 users that have rated some of these
-movies on a rating scale from zero to five stars, the goal is to predict future
-ratings based on past ratings. The challenge is to do this for the over 700
-millions different movie/user combinations  based on only 1.2% (9 millions) of
-such combinations used for training the algorithm.
+movies on a rating scale from half a star to five stars, the goal is to predict
+future ratings based on past ratings. The challenge is to do this for the over
+700 millions different movie/user combinations  based on only 1.2% (9 millions)
+of such combinations used for training the algorithm.
 
 The available data of 10 million ratings are split into 9 million ratings to
-train different algorithms and 1 million ratings to evaluate the performance
-of these methods. Performance is the root-mean squared error (RMSE) of ratings.
+train different algorithms and 1 million ratings to evaluate the performance of
+these methods. Performance is measured by the root-mean squared error (RMSE) of
+ratings.
 
 Based on the RMSE, the model that performs best with an RMSE of 0.8648 is
 \[
 Y_{u,i} = \mu + b_i + b_u + \sum_{k=1}^K \delta_{i,k} \beta_k + 
 \varepsilon_{u,i},
 \]
-where $Y_{u,i}$ is the rating by user $u$ of movie $i$, and $\delta_{i,k}$ is
-an indicator which is $1$ if the movie $i$ is of genre $k$ and zero otherwise.
+where $Y_{u,i}$ is the rating by user $u$ of movie $i$, $\delta_{i,k}$ is
+an indicator which is $1$ if the movie $i$ is of genre $k$ and zero otherwise,
+$b_i$ is the movie effect, $b_u$ the user effect and $\beta_k$ the genre
+effect.
 
 # Introduction
 The movielens project makes available millions of a movie ratings provided by
 anonymised users.
 
-From the movielens website information about the data [here](http://files.grouplens.org/datasets/movielens/ml-10m-README.html)
-the following further information is provided: 
+From the movielens website information about the data on
+\blueref{http://files.grouplens.org/datasets/movielens/ml-10m-README.html}
+{this website} the following further information is provided: 
 
 * The data set contains just over 10 million ratings by users of the online
 movie recommender service MovieLens.
 * Users were selected at random for inclusion. All users selected had rated at
 least 20 movies. Each user is represented by an id, and no other information is
-provided.
+provided about users.
 
 Denoting the rating by any of these users $u$ of a certain movie $i$, the task
 is to predict ratings $Y_{u,i}$ of any such user/movie combination $(u,i)$. The
-challenge is that there are overall 71,567 users and 10,681 movies, yielding
-$71,567 \times 10,681 = 764,407,127$ while only 10 million data points, so only
-about 1.3% $(=10/764.4)$ such data are available in totality and 10% (1 million)
-of the data must be held out as test set, leaving 1.2% $(=9/764.4)$ of data to
-train a rating prediction algorithm.
+challenge is that there are overall 71,567 users and 10,681 movies (figures from
+the website), yielding $71,567 \times 10,681 = 764,407,127$ while only 10
+million data points, so only about 1.3% $(=10/764.4)$ such data, are available
+in totality and 10% (1 million) of the data must be held out as test set,
+leaving 1.2% $(=9/764.4)$ of data to train a rating prediction algorithm.
 
 To do so, the data are examined and modelled in 
 \greenref{methods} which is further broken down into:
 
 * \greenref{methods_techniques} to elaborate on the techniques used, in 
-particular in the modelling \greenref{methods_modelling}.
+particular those code later in the modelling \greenref{methods_modelling}.
 * \greenref{methods_data_structure} to provide an overview of the basic
 structure of the rating data.
 * \greenref{methods_data_cleaning} to perform data cleaning.
@@ -113,7 +131,7 @@ smoothing (LOESS) method in \greenref{method_loess}.
 
 ### Regularisation {#method_regularisation}
 The modelling techniques employed are regularised least squared estimates.
-Specifically, a model of the form
+As an example, a model of the form
 \[
 Y_{u,i} = \mu + b_i + \varepsilon_{u,i}
 \]
@@ -186,6 +204,10 @@ the locally estimated scatterplot smoothing (LOESS) estimates a regression
 line in a local window that is progressively moved through the data. The
 parameter of LOESS is the width of this window.
 
+Further details of the LOESS can be found on 
+\blueref{https://en.wikipedia.org/wiki/Local_regression}
+{this Wikipedia website}.
+
 ## Data Structure and Loading {#methods_data_structure}
 The raw data is provided in two sets, called `edx` and `validation`.
 
@@ -214,7 +236,7 @@ the `str` function and is listed below for `edx`:
 |genres    |character |Comedy&#124;Romance Action&#124;Crime&#124;Thriller Action&#124;Drama&#124;Sci-Fi&#124;Thriller |
 
 
-The data sets are both tidy as well - the count of `NA` values is zero for both 
+The data sets are both tidy - the count of `NA` values is zero for both 
 sets:
 ```{r data tidy}
 edx %>% summarise_all(~sum(is.na(.)))
@@ -246,7 +268,10 @@ validation <- validation %>%
 ## Data Exploration and Visualisation {#methods_data_exp_vis}
 
 ### General Data Distribution Properties
-The `edx` data set contains 9,000,055 data point, consisting of 10,677
+For better readability, the code pieces for the subsequent graphs in this Section
+are displayed in \hyperlink{appendix_figures}{\greenuline{Appendix A}}.
+
+The `edx` data set contains 9,000,055 data points, consisting of 10,677
 distinct movies and 69,878 different users:
 ```{r data count}
 edx %>%
@@ -265,8 +290,6 @@ n_movies_sub <- length(unique(edx_1000$movieId))
 n_users_sub <- length(unique(edx_1000$userId))
 ```
 
-For better readability, the code pieces for the subsequent graphs in this Section
-are displayed in \hyperlink{appendix_figures}{\greenuline{Appendix A}}.
 
 #### Data Sparsity {#data_sparsity_figure}
 Within the sample of 1,000 ratings drawn as described in 
@@ -919,7 +942,7 @@ Note that regularisation RMSE data are loaded from the file
 re-running the tuning takes several hours.
 
 ```{r load reg movie user RMSE, include = FALSE}
-load(file = "RMSE_data_mur.Rdata")
+load(file = "data//RMSE_data_mur.Rdata")
 ```
 
 Plotting the RMSE for these values of $\lambda$ shows that the optimal
@@ -1004,7 +1027,7 @@ Note that since this tuning takes some time, the results are stored for this
 report and loaded from the file
 
 ```{r load time effect model, include = FALSE}
-load(file = "train_loess.Rdata")
+load(file = "data//train_loess.Rdata")
 ```
 
 The optimal span parameters is $span_opt =$  `r train_loess$bestTune$span`
@@ -1201,7 +1224,7 @@ Since this tuning runs several hours, the results are saved to the file
 RMSE against $\lambda_g$:
 
 ```{r reg genre plot}
-load(file = "RMSE_data_g.Rdata")
+load(file = "data//RMSE_data_g.Rdata")
 RMSE_data_g %>%
     ggplot(aes(x = lambda, y = RMSE_avg)) +
     geom_point() +

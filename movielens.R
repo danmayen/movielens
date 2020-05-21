@@ -6,11 +6,105 @@ library(gridExtra)
 library(purrr)
 library(gam)
 
-source("loadLocalData.R")
-source("loadLocalSampleData.R")
+################################################################################
+# 0.0 README
+################################################################################
+# For FIRST run of this script, run section 0.1 to load data from REMOTE
+# file repositories and save to locad data files.
+# This creates two files:
+# 1) data//dslabs_movielens.Rdata
+# 2) data//dslabs_movielens_extract.Rdata
+# For all SUBSEQUENT runs of this script, run section 0.2 to load LOCAL
+# data from these two files
 
 ################################################################################
-# Auxiliary functions
+# 0.1 Loading of data - RUN ONCE ONLY
+################################################################################
+################################
+# Create edx set, validation set
+################################
+
+# Note: this process could take a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+
+# MovieLens 10M dataset:
+# https://grouplens.org/datasets/movielens/10m/
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
+                                           title = as.character(title),
+                                           genres = as.character(genres))
+
+movielens <- left_join(ratings, movies, by = "movieId")
+
+# Validation set will be 10% of MovieLens data
+set.seed(1, sample.kind="Rounding")
+# if using R 3.5 or earlier, use `set.seed(1)` instead
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+    semi_join(edx, by = "movieId") %>%
+    semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+
+# save extracted data to file for later quick retrieval
+save.image(file = "data//dslabs_movielens.Rdata")
+
+# save extracts for quick exploration / code trials
+set.seed(123, sample.kind = "Rounding")
+edx_1000 <- sample_n(edx, size = 1000)
+validation_1000 <- sample_n(validation, size = 1000)
+save(edx_1000, validation_1000, 
+     file = "data//dslabs_movielens_extract.Rdata")
+
+
+################################################################################
+# 0.2 Load data from local files
+################################################################################
+# source("loadLocalData.R") - would run this if could split R script into
+# several chunks i/o one monolithic script as demanded 
+# load FULL data if needed
+if(!exists("edx") | !exists("validation")) {
+    print("Loading data sets 'edx' and 'validation'...")
+    load(file = "data//dslabs_movielens.Rdata")
+    print("Done!")
+} else {
+    print("Data 'edx' and 'validation' already loaded")
+    }
+
+# source("loadLocalSampleData.R") - would run this if could split R script into
+# several chunks i/o one monolithic script as demanded 
+# load SAMPLE data if needed
+if(!exists("edx_1000") | !exists("validation_1000")) {
+    print("Loading data sets 'edx_1000' and 'validation_1000'...")
+    load(file = "data//dslabs_movielens_extract.Rdata")
+    print("Done!")
+} else {
+    print("Data 'edx_1000' and 'validation_1000' already loaded")
+    }
+
+
+################################################################################
+# 1 Auxiliary functions
 ################################################################################
 #' Returns data frame with format of a given data frame
 #' 
@@ -532,7 +626,7 @@ RMSE_data_mur %>%
          title = "Tuning of movie/user lambda for regularisation")
 
 # save for plotting in report document
-save(RMSE_data_mur, lambda_mur_opt, file = "RMSE_data_mur.Rdata")
+save(RMSE_data_mur, lambda_mur_opt, file = "data//RMSE_data_mur.Rdata")
 
 #' Prediction function for regularised movie/user effect
 #' 
@@ -578,7 +672,7 @@ train_loess <- train(d_ui ~ rating_wk, data = d_ui_tbl,
                      tuneGrid = data.frame(degree = 1,
                                            span = seq(0.10, 0.60, 0.05)))
 # save model for report
-save(train_loess, file = "train_loess.Rdata")
+save(train_loess, file = "data//train_loess.Rdata")
 
 # plot and look up best span parameter
 ggplot(train_loess, highlight = TRUE)
@@ -719,7 +813,7 @@ RMSE_data_g <- cbind(data.frame(lambda = lambdas),
                      RMSE_data_g)
 
 # save data to file for report
-save(RMSE_data_g, file = "RMSE_data_g.Rdata")
+save(RMSE_data_g, file = "data//RMSE_data_g.Rdata")
 
 # plot lambdas
 RMSE_data_g %>%
@@ -871,7 +965,7 @@ knitr::kable(rmse_results)
 
 ################################################################################
 ################################################################################
-# Saving progress
+# Saving progress, for working versions, uncomment as needed
 ################################################################################
 ################################################################################
 # save.image(file = "movielens_20200515.Rdata")
