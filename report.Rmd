@@ -52,7 +52,6 @@ if(FINAL_VERSION) {
     }
 ```
 
-<!--\newcommand{\blueref}[1]{\textcolor{blue}{\autoref{#1}}}-->
 \newcommand{\blueref}[2]{\href{#1}{\textcolor{blue}{#2}}}
 \newcommand{\greenref}[1]
 {\color{green}\underline{{\color{black}\autoref{#1}}}\color{black}{}}
@@ -85,9 +84,10 @@ effect.
 The movielens project makes available millions of a movie ratings provided by
 anonymised users.
 
-From the movielens website information about the data on
+From the
 \blueref{http://files.grouplens.org/datasets/movielens/ml-10m-README.html}
-{this website} the following further information is provided: 
+{movielens website} about the data the following further information is 
+available: 
 
 * The data set contains just over 10 million ratings by users of the online
 movie recommender service MovieLens.
@@ -107,7 +107,7 @@ To do so, the data are examined and modelled in
 \greenref{methods} which is further broken down into:
 
 * \greenref{methods_techniques} to elaborate on the techniques used, in 
-particular those code later in the modelling \greenref{methods_modelling}.
+particular those coded in the later modelling \greenref{methods_modelling}.
 * \greenref{methods_data_structure} to provide an overview of the basic
 structure of the rating data.
 * \greenref{methods_data_cleaning} to perform data cleaning.
@@ -274,6 +274,7 @@ are displayed in \hyperlink{appendix_figures}{\greenuline{Appendix A}}.
 The `edx` data set contains 9,000,055 data points, consisting of 10,677
 distinct movies and 69,878 different users:
 ```{r data count}
+nrow(edx)
 edx %>%
     summarise(n_movies = n_distinct(movieId),
               n_users = n_distinct(userId))
@@ -310,7 +311,8 @@ edx_1000 %>%
           col = grey.colors(n = 1, start = 0, end = 1))
 ```
 
-The code is shown \hyperlink{code_sparsity_figure}{\greenuline{here}}.
+The code for this figure is shown
+\hyperlink{code_sparsity_figure}{\greenuline{here}}.
 
 #### Ratings by Movie {#data_ratings_by_movie_figure}
 
@@ -328,7 +330,7 @@ edx %>%
          x = "Number of Ratings (log scale)")
 ```
 
-The code is shown \hyperlink{code_ratings_by_movie_figure}{\greenuline{here}}.
+The code for this chart can be found \hyperlink{code_ratings_by_movie_figure}{\greenuline{here}}.
 
 #### Ratings by User {#data_ratings_by_user_figure}
 
@@ -362,13 +364,13 @@ edx %>%
          x = "Rating", y = "Count") 
 ```
 
-The code is displayed \hyperlink{code_ratings_distribution_figure}{\greenuline{here}}.
+The code for this histogram is displayed \hyperlink{code_ratings_distribution_figure}{\greenuline{here}}.
 
 ### Movie Effect {#data_movie_effect}
-From public movie ratings such as [Rotten
-Tomatoes](https://www.rottentomatoes.com/) it is known that some movies are in
-general better rated than others. We group the ratings by movie ID to 
-evaluate the same effect. In addition to the average rating for each movie,
+From public movie ratings such as
+\blueref{https://www.rottentomatoes.com/}{Rotten Tomatoes} it is known that some
+movies are in general better rated than others. We group the ratings by movie ID
+to evaluate the same effect. In addition to the average rating for each movie,
 the standard deviation of ratings for the same movie is visualised in parallel.
 
 ```{r dist rating by movie, echo = FALSE}
@@ -409,7 +411,9 @@ the value of one (star).
 
 ### User Effect {#data_user_effect}
 Similar to the movie effect, different users may have the tendency to award
-higher or lower ratings, compared to other users.
+higher or lower ratings, compared to other users. We examine this effect by
+grouping the ratings by user and arranging them by their average, along
+with the standard deviation of the same grouping by user:
 
 ```{r dist rating by user, echo = FALSE}
 # distribution of ratings by user
@@ -647,10 +651,12 @@ validation_split %>%
 \definecolor{blizzardblue}{rgb}{0.67, 0.9, 0.93}
 \definecolor{blond}{rgb}{0.98, 0.94, 0.75}
 
-For example, the parameter $\lambda$ is applied to the
+For example, the parameter $\lambda$ of the regularisation method introduced
+in \greenref{method_regularisation} is applied to the
 \colorbox{blizzardblue}{training data} and the RMSE that results from that
-particular values of $\lambda$ is evaluated in the 
-\colorbox{blond}{test data}.
+particular values of $\lambda$ is evaluated on the 
+\colorbox{blond}{test data}. This is done $k=25$ times to produce an estimate
+of the RMSE depending on $\lambda$.
 
 The **performance** of each algorithm is evaluated using the RMSE which is
 implemented in the function `RMSE_rating`:
@@ -694,7 +700,7 @@ Y_{u,i} = \mu + b_i + \varepsilon_{u,i}
 \qquad (i=1,\ldots,J; u=1,\ldots,n_i),
 \]
 where $b_i$ is the effect (or bias) of movie $i$ across all users,
-and the residual values is $\varepsilon_{u,i}$. As shown in 
+and the residual value is $\varepsilon_{u,i}$. As shown in 
 \greenref{method_regularisation}, the estimator for the movie effect
 is given (for the special case of $\lambda=0$) by
 \[
@@ -732,7 +738,7 @@ rating. Analogously to the movie effect, the user effect is expressed through
 the model
 \[
 Y_{u,i} = \mu + b_u + \varepsilon_{u,i} 
-\qquad (i=1,\ldots,J; u=1,\ldots,n_i),
+\qquad (i=1,\ldots,J; u=1,\ldots,n_i).
 \]
 The user effect $b_u$ is estimated by the equation following 
 \greenref{method_regularisation}:
