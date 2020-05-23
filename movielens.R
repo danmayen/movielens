@@ -573,7 +573,7 @@ RMSE_movieuser_kfold <- function(data, ind_list, lambda) {
             group_by(userId) %>%
             summarise(b_u = sum(rating - b_i - mu)/(n()+lambda))
         
-        # modify test set so all movies and users from training
+        # modify validation set so all movies and users from training
         # set are contained in it
         validation_set <- validation_set %>%
             semi_join(train_set, by = "movieId") %>%
@@ -970,7 +970,8 @@ knitr::kable(rmse_results)
 ################################################################################
 # save.image(file = "movielens_20200515.Rdata")
 # save.image(file = "movielens_20200517.Rdata")
-save.image(file = "movielens_20200518.Rdata")
+# save.image(file = "movielens_20200518.Rdata")
+save.image(file = "movielens_20200522.Rdata")
 
 # load on demand
 # load(file = "movielens_20200515.Rdata")
