@@ -2,7 +2,7 @@
 Movielens project from Harvard Data Science course, capstone module
 
 # R Files
-* movielens.R
+* movielens.R  
 _Part of submission_. Overall code to load data, train models and evaluate
 performance.
 
@@ -26,16 +26,16 @@ data/dslabs_movielens_extract.Rdata.
 Main report.
 
 # PDF files
-* report.pdf
+* report.pdf  
 Main report, compiled from report.Rmd.
 
 # Data files
-* RMSE_data_mur.Rdata
+* RMSE_data_mur.Rdata  
 Contains results of training regularised movie and user effects for final use
 and report.
 
-* RMSE_data_g.Rdata
+* RMSE_data_g.Rdata  
 Contains results of training regularised genre effect for final use and report.
 
-* train_loess.Rdata
+* train_loess.Rdata  
 Contains results of training LOESS model to time effect.
