@@ -27,7 +27,7 @@ library(ggplot2)
 library(gridExtra)
 # Set to TRUE for final version, is kept at FALSE for quicker compiling
 # of drafts
-FINAL_VERSION = FALSE
+FINAL_VERSION = TRUE
 
 # load data from local repository
 if(FINAL_VERSION) {
@@ -1033,7 +1033,7 @@ train_loess <- train(d_ui ~ rating_wk, data = d_ui_tbl,
 ```
 
 Note that since this tuning takes some time, the results are stored for this
-report and loaded from the file `train_loss.Rdata`:
+report and loaded from the file `train_loess.Rdata`:
 
 ```{r load time effect model}
 load(file = "data//train_loess.Rdata")
@@ -1405,7 +1405,8 @@ more information it can be observed that:
 * Adding the time of the rating actually produces a worse performance than 
 leaving it out.
 * Adding the genre of the movie leads to only a slight improvment in
-performance, but does result in the best-performing model.
+performance, but does result in the **best-performing model** with an RMSE of
+0.8648.
 
 # Conclusion {#conclusion}
 With elementary methods such as regularised average and local regression
@@ -1417,7 +1418,12 @@ rating even slightly deteriorates the performance.
 
 So the overall best model among those tested is the regularised movie, user
 and genre effect, with the same regularisation parameter for movie and user
-and a different regularisation parameter for the genre.
+and a different regularisation parameter for the genre:
+\[
+Y_{u,i} = \mu + b_i + b_u + \sum_{k=1}^K \delta_{i,k} \beta_k + 
+        \varepsilon_{u,i}
+\]
+The RMSE is 0.8648.
 
 It may be possible to boost the performance further by 
 
